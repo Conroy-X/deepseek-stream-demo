@@ -1,0 +1,26 @@
+# 密钥与本地配置：绝对不能进 git
+.env
+.env.local
+.env.*.local
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# 数据与日志
+*.db
+*.sqlite3
+*.log
+logs/
+data/
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+.DS_Store

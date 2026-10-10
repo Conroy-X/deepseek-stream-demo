@@ -1,0 +1,6 @@
+# Day 3 依赖 —— 用 uv 安装：uv pip install -r requirements.txt
+# 版本用区间约束，避免初学者被精确版本卡住；正式项目建议锁定版本。
+
+openai>=1.60          # OpenAI 兼容 SDK，DeepSeek 官方推荐用法
+python-dotenv>=1.0    # 从 .env 读环境变量，密钥不写进代码
+rich>=13.9            # 终端美化：Markdown 渲染、进度提示、颜色
