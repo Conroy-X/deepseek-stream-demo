@@ -39,7 +39,7 @@ class LLMConfigError(RuntimeError):
 class LLMCallError(RuntimeError):
     """调用失败，已翻译成人类可读的提示。"""
 
-
+# todo
 @dataclass
 class Usage:
     """累计用量统计。"""
@@ -100,6 +100,7 @@ class LLMClient:
     ) -> None:
         api_key = os.getenv("DEEPSEEK_API_KEY", "").strip()
         base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com").strip()
+        model_name = os.getenv("DEEPSEEK_MODEL", "deepseek-flash").strip()
 
         if not api_key or api_key.startswith("sk-你的"):
             raise LLMConfigError(
@@ -107,7 +108,7 @@ class LLMClient:
                 "（申请地址 https://platform.deepseek.com/api_keys）"
             )
 
-        self.model = (model or os.getenv("DEEPSEEK_MODEL", "deepseek-flash")).strip()
+        self.model = model or model_name
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.usage = Usage()

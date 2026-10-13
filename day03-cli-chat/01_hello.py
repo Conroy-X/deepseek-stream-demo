@@ -55,7 +55,7 @@ try:
     resp = client.chat.completions.create(
         model=MODEL,
         messages=messages,
-        temperature=0.3,   # 0~2，越小越稳定；事实类问题建议 0~0.3
+        temperature=1.5,   # 0~2，越小越稳定；事实类问题建议 0~0.3
         max_tokens=512,    # 输出上限，练习期设小一点，避免意外烧钱
         stream=False,
     )

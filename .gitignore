@@ -1,22 +1,43 @@
-# 密钥：绝对不要提交
+# ============================================================
+#  AI Journey · 仓库根 .gitignore
+# ⚠️ 铁律：API Key 只放 .env，永远不要提交
+# ============================================================
+
+# ---------- 密钥与本地配置（绝对不能进 git）----------
 .env
 .env.local
 .env.*.local
+*.pem
+*.key
+!*.example
 
-# Python
+# ---------- Python ----------
 __pycache__/
 *.py[cod]
+*$py.class
+*.so
 .venv/
 venv/
+env/
+*.egg-info/
 .pytest_cache/
 .ruff_cache/
-*.egg-info/
+.mypy_cache/
+.uv/
 
-# 运行产物
+# ---------- 运行产物 / 数据 ----------
+logs/
 *.log
-uvicorn.pid
+data/
+*.db
+*.sqlite3
 
-# 编辑器 / 系统
+# ---------- 编辑器 / 系统 ----------
 .DS_Store
 Thumbs.db
 *.swp
+*.swo
+.idea/
+
+# 注意：.vscode/ 有意纳入版本控制
+# （launch.json / settings.json 是共享的调试配置，里面没有任何密钥）

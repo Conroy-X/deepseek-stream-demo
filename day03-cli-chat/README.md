@@ -212,3 +212,182 @@ git commit -m "day03: CLI chat with DeepSeek API (multi-turn + usage + error han
 | `python3` 变成 3.14 | 裸 `python3` 命中了 uv 的 shim；用 `.venv/bin/python` 或 `uv venv --python /usr/bin/python3` |
 
 **官方排错资料**：[DeepSeek 错误码](https://api-docs.deepseek.com/zh-cn/quick_start/error_codes) ｜ [DeepSeek 限速与隔离](https://api-docs.deepseek.com/zh-cn/quick_start/rate_limit)
+
+---
+
+## 十、调试环境（2026-10-14 配置完成）
+
+### 10.1 装了什么 / 在哪
+
+| 配置 | 位置 | 作用 |
+| --- | --- | --- |
+| `launch.json`（5 个 F5 配置） | `~/ai-journey/.vscode/launch.json` | 断点调试；已绑定 `.venv` 解释器 + 自动注入 `.env`，**不用手动 source activate** |
+| `settings.json` | `~/ai-journey/.vscode/settings.json` | VS Code 自动认出 day03 的虚拟环境、隐藏 `__pycache__` |
+| `debugpy 1.8.22` | 装在 `day03-cli-chat/.venv` | VS Code Python 调试器的后端，**不装按 F5 会报 "debugpy not found"** |
+| `debug_response.py` | `day03-cli-chat/` | 响应查看器：请求 payload → 原始 JSON body → 字段解释 → 流式 chunk |
+| `logs/last_response.json` | `day03-cli-chat/logs/` | 每次调用自动存一份原始响应（已 gitignore） |
+
+### 10.2 怎么用（VS Code 在 Windows 上）
+
+1. VS Code → `F1` → `Remote-SSH: Connect to Host` → 选 `wsl-debian`（或 `WSL: Connect`）
+2. 打开文件夹 `~/ai-journey`（**注意是 ai-journey，不是 day03 子目录**，`.vscode` 在这一层）
+3. `Ctrl+Shift+D` 打开 Run and Debug，下拉框选配置，`F5` 启动：
+
+| 配置 | 用途 |
+| --- | --- |
+| ① 01_hello（第一次真实调用） | 最小调用，验证环境 |
+| ② chat.py（多轮对话 CLI） | 调试主产出，可在 `llm.py` 打断点 |
+| ③ debug_response（查看原始响应） | **想看服务端到底返回了什么，选这个** |
+| ④ debug_response --stream（看 chunk） | 流式逐块输出 |
+| ⑤ 当前文件（不读 .env） | 调试任意脚本时的通用配置 |
+
+4. **打断点的位置（第一天就记住这三个）**：
+   - `llm.py` → `resp = self._client.chat.completions.create(...)` 之后一行：能直接看 `resp` 对象，展开 `choices` / `usage`
+   - `llm.py` → `except AuthenticationError` 那行：调试错误分支
+   - `chat.py` → `messages.append(...)` 那行：观察上下文数组如何逐轮增长（Day 10 的核心）
+
+### 10.3 debug_response.py 命令行用法
+
+```bash
+source .venv/bin/activate
+
+python debug_response.py                      # 完整视图（推荐）
+python debug_response.py -p "换个问题"          # 换提问
+python debug_response.py --raw-http           # 额外打印 SDK 的 HTTP 层日志
+python debug_response.py --stream             # 看每个 chunk 的原始 JSON
+python debug_response.py --json-only > r.json # 只要原始 JSON，便于 jq 分析
+python debug_response.py --raw-http 2>&1 | grep -E "POST|HTTP"   # 只看请求行与状态码
+```
+
+### 10.4 实测响应结构（2026-10-14，deepseek-flash）
+
+一次真实调用的返回（节选）：
+
+```json
+{
+  "id": "6ffba341-8f33-49a2-8b06-ed3ac846a76a",
+  "object": "chat.completion",
+  "created": 1791908251,
+  "model": "deepseek-flash",
+  "choices": [{
+    "index": 0,
+    "message": {
+      "role": "assistant",
+      "content": "Token 是 LLM 处理文本时的最小单位……",
+      "reasoning_content": "我们需要回答用户中文问题……"
+    },
+    "finish_reason": "stop"
+  }],
+  "usage": {
+    "prompt_tokens": 52,
+    "completion_tokens": 158,
+    "total_tokens": 210,
+    "completion_tokens_details": { "reasoning_tokens": 124 },
+    "prompt_cache_hit_tokens": 0,
+    "prompt_cache_miss_tokens": 52
+  }
+}
+```
+
+**四个必须记住的点：**
+
+1. **`deepseek-flash` 是推理模型**，`message` 里多了一个 `reasoning_content`（推理过程）。
+   实测这一次：输出 158 token 里有 **124 个是推理 token**（占 78%），而推理 token **按输出价计费**。
+   所以同样的回答，推理模型比非推理模型贵得多——`max_tokens` 要设小，`temperature` 对它基本无效。
+   代码里只读 `content`，推理内容会被静默丢弃但照常扣费。
+2. **`finish_reason`**：`stop` = 正常结束；`length` = 被 `max_tokens` 截断（回答会突然断掉，看到它就调大或缩短问题）。
+3. **`prompt_cache_hit_tokens`**：命中上下文缓存时这部分输入单价更低。多轮对话中，前面不变的历史会自动命中——
+   这是 Day 10「Context 管理」省钱的原理。
+4. **`x-ds-trace-id`**（响应头）：向服务商报障时唯一有用的凭证，`debug_response.py` 会自动打印。
+
+### 10.5 不写代码时的排查手段
+
+```bash
+# 1) 看 SDK 到底发了什么 HTTP 请求（openai SDK 原生支持）
+OPENAI_LOG=debug python 01_hello.py 2>&1 | grep -E "POST|HTTP/1.1|retry"
+
+# 2) 看最近一次的原始响应
+cat logs/last_response.json | jq .
+
+# 3) 确认网络与鉴权（不花 token）
+curl -s -o /dev/null -w "%{http_code}\n" https://api.deepseek.com
+```
+
+> ⚠️ `--raw-http` 的日志里会**带完整 Authorization 头**，截图分享前记得打码。
+
+### 10.6 怎么拿响应头（x-ds-trace-id 等）—— 2026-10-14 全部实测
+
+先说结论：**`x-ds-trace-id` 只在响应头里，`response.body` 里没有**。所以想要它，必须走下面 4 条路之一。
+DeepSeek 一次调用的响应头共 **13 个**（`debug_response.py` 已全部打印）：
+
+```
+server: openresty                                    content-encoding: gzip
+content-type: application/json                       access-control-allow-credentials: true
+vary: accept-encoding, origin, ...                   x-ds-trace-id: 7532cbcafad65e343352fbcca0acc842   ★
+strict-transport-security: max-age=31536000; ...     x-content-type-options: nosniff
+transfer-encoding: chunked                           connection: keep-alive
+date: Tue, 13 Oct 2026 16:28:05 GMT                  eo-log-uuid: 8896895260681856195
+eo-cache-status: MISS                                ← 腾讯 EdgeOne CDN，MISS 表示没走缓存
+```
+
+#### 方式 A：`with_raw_response`（首选，本项目已在用）
+
+```python
+raw = client.chat.completions.with_raw_response.create(model=..., messages=..., max_tokens=8)
+
+headers   = dict(raw.headers)                  # 13 个头，键为小写
+trace_id  = headers["x-ds-trace-id"]           # ← 报障凭证
+status    = raw.status_code                    # 200
+underlying = raw.http_response                 # 底层 httpx2.Response 对象
+resp      = raw.parse()                        # 解析成正常 ChatCompletion，业务代码照常用
+```
+
+`debug_response.py` 走的就是这条路，所以它的输出里天然带着 trace-id。
+
+#### 方式 B：`httpx2` 事件钩子（生产级，业务代码零改动）
+
+日志系统里想给**每一次**调用自动打 trace-id，用这个。已写进 `headers_demo.py`：
+
+```python
+from httpx2 import Client            # ⚠️ 是 httpx2，不是 httpx（见下方坑 2）
+
+def on_response(response):
+    logger.info("llm_call status=%s trace_id=%s",
+                response.status_code, response.headers.get("x-ds-trace-id"))
+
+client = OpenAI(..., http_client=Client(event_hooks={"response": [on_response]}))
+```
+
+后面 Day 13「LLM 工程化」的日志系统直接复用这个钩子。
+
+#### 方式 C：SDK 调试日志（只能看状态码）
+
+```bash
+OPENAI_LOG=debug python 01_hello.py 2>&1 | grep -i "http"
+# Building HTTP request: method=POST retries_taken=0
+# Sending HTTP Request: POST
+# HTTP Response: POST 200
+```
+
+⚠️ **它不打印响应头**，所以拿不到 trace-id；它的价值是看 `retries_taken`（重试了几次），Day 13 调重试逻辑时用它。
+
+#### 方式 D：curl 裸请求（判断是 SDK 还是网络的问题）
+
+```bash
+set -a; . ./.env; set +a
+curl -sS -D - -o /dev/null -X POST https://api.deepseek.com/chat/completions \
+  -H "Authorization: Bearer $DEEPSEEK_API_KEY" -H "Content-Type: application/json" \
+  -d '{"model":"deepseek-flash","messages":[{"role":"user","content":"hi"}],"max_tokens":1}'
+```
+
+`-D -` 把响应头打到终端，`-o /dev/null` 丢掉 body。实测返回 `HTTP/2 200` + 12 个头。
+
+#### ⚠️ 三个实测踩到的坑
+
+| 坑 | 现象 | 正确做法 |
+| --- | --- | --- |
+| 1. 普通 `create()` 拿不到头 | `completion.response` / `._response` / `.request_id` 全部 `AttributeError`；`._request_id` 存在但值为 `None`（DeepSeek 不返回 `x-request-id`） | 必须用 `with_raw_response` 或事件钩子 |
+| 2. `httpx` 在这里不存在 | `import httpx` → `ModuleNotFoundError`（openai 3.28 内部用的是 **httpx2 2.13.1**） | `from httpx2 import Client`；也可 `import openai._base_client as b; b.httpx2` |
+| 3. 别用标准字段名去取 | `x-request-id` 取不到东西 | DeepSeek 的追踪 ID 固定叫 `x-ds-trace-id`，换服务商时先 `print(dict(raw.headers))` 看一眼真实字段名 |
+
+> 已经封装好、可直接跑：`python headers_demo.py`（方式 A + B 实跑，C/D 的完整命令）。

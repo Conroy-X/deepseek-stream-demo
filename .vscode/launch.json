@@ -1,0 +1,81 @@
+{
+    // VS Code 调试配置（WSL Remote 下使用）
+    // 打开方式：VS Code 连接到 WSL 后打开 ~/ai-journey 目录，按 F5 选下方配置。
+    // 所有配置都已绑定 day03-cli-chat 的虚拟环境与 .env，不需要手动 source activate。
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "① 01_hello（第一次真实调用）",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/day03-cli-chat/01_hello.py",
+            "cwd": "${workspaceFolder}/day03-cli-chat",
+            "python": "${workspaceFolder}/day03-cli-chat/.venv/bin/python",
+            "envFile": "${workspaceFolder}/day03-cli-chat/.env",
+            "env": {
+                "PYTHONUNBUFFERED": "1",
+                "LANG": "C.UTF-8"
+            },
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "stopOnEntry": false
+        },
+        {
+            "name": "② chat.py（多轮对话 CLI）",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/day03-cli-chat/chat.py",
+            "cwd": "${workspaceFolder}/day03-cli-chat",
+            "python": "${workspaceFolder}/day03-cli-chat/.venv/bin/python",
+            "envFile": "${workspaceFolder}/day03-cli-chat/.env",
+            "env": {
+                "PYTHONUNBUFFERED": "1",
+                "LANG": "C.UTF-8"
+            },
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "③ debug_response（查看原始响应）",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/day03-cli-chat/debug_response.py",
+            "args": [],
+            "cwd": "${workspaceFolder}/day03-cli-chat",
+            "python": "${workspaceFolder}/day03-cli-chat/.venv/bin/python",
+            "envFile": "${workspaceFolder}/day03-cli-chat/.env",
+            "env": {
+                "PYTHONUNBUFFERED": "1",
+                "LANG": "C.UTF-8"
+            },
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "④ debug_response --stream（看 chunk）",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/day03-cli-chat/debug_response.py",
+            "args": ["--stream"],
+            "cwd": "${workspaceFolder}/day03-cli-chat",
+            "python": "${workspaceFolder}/day03-cli-chat/.venv/bin/python",
+            "envFile": "${workspaceFolder}/day03-cli-chat/.env",
+            "env": {
+                "PYTHONUNBUFFERED": "1",
+                "LANG": "C.UTF-8"
+            },
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "⑤ 当前文件（Current File，不读 .env）",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "cwd": "${fileDirname}",
+            "python": "${workspaceFolder}/day03-cli-chat/.venv/bin/python",
+            "console": "integratedTerminal",
+            "justMyCode": true
+        }
+    ]
+}
