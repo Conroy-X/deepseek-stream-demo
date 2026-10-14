@@ -76,6 +76,80 @@
             "python": "${workspaceFolder}/day03-cli-chat/.venv/bin/python",
             "console": "integratedTerminal",
             "justMyCode": true
+        },
+        {
+            "name": "⑥ day04 · 变体对比 variants",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/day04-prompt/experiments.py",
+            "args": ["variants", "--cases", "2"],
+            "cwd": "${workspaceFolder}/day04-prompt",
+            "python": "${workspaceFolder}/day04-prompt/.venv/bin/python",
+            "envFile": "${workspaceFolder}/day04-prompt/.env",
+            "env": { "PYTHONUNBUFFERED": "1", "LANG": "C.UTF-8" },
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "⑦ day04 · few-shot 对比",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/day04-prompt/experiments.py",
+            "args": ["fewshot", "--cases", "2"],
+            "cwd": "${workspaceFolder}/day04-prompt",
+            "python": "${workspaceFolder}/day04-prompt/.venv/bin/python",
+            "envFile": "${workspaceFolder}/day04-prompt/.env",
+            "env": { "PYTHONUNBUFFERED": "1", "LANG": "C.UTF-8" },
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "⑧ day04 · System vs User",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/day04-prompt/experiments.py",
+            "args": ["system", "--cases", "2"],
+            "cwd": "${workspaceFolder}/day04-prompt",
+            "python": "${workspaceFolder}/day04-prompt/.venv/bin/python",
+            "envFile": "${workspaceFolder}/day04-prompt/.env",
+            "env": { "PYTHONUNBUFFERED": "1", "LANG": "C.UTF-8" },
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "⑨ day04 · 只看 Prompt（dry-run，不花钱）",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/day04-prompt/experiments.py",
+            "args": ["variants", "--dry-run"],
+            "cwd": "${workspaceFolder}/day04-prompt",
+            "python": "${workspaceFolder}/day04-prompt/.venv/bin/python",
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "⑩ day04 · 离线自检（不花钱）",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/day04-prompt/selfcheck.py",
+            "cwd": "${workspaceFolder}/day04-prompt",
+            "python": "${workspaceFolder}/day04-prompt/.venv/bin/python",
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "⑪ day04 · 代码审查助手（选做）",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/day04-prompt/code_reviewer.py",
+            "args": [],
+            "cwd": "${workspaceFolder}/day04-prompt",
+            "python": "${workspaceFolder}/day04-prompt/.venv/bin/python",
+            "envFile": "${workspaceFolder}/day04-prompt/.env",
+            "env": { "PYTHONUNBUFFERED": "1", "LANG": "C.UTF-8" },
+            "console": "integratedTerminal",
+            "justMyCode": true
         }
+
     ]
 }
