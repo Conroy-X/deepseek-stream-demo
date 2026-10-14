@@ -3,7 +3,7 @@
 > 从传统 Web/前端 转向 **AI 应用开发工程师** 的完整学习工程。
 > 主路线：`LLM API → Prompt → RAG → Agent → LangGraph → MCP → AI 工程化 → 项目 → 面试`
 
-**当前进度**：Day 3（2026-10-10 开始）· 核心已跑通（2026-10-14）
+**当前进度**：Day 3 ✅ 已验收（2026-10-14）｜下一步：Day 4 Prompt 工程
 **每日投入**：1–2 小时（在职节奏）
 **主力模型**：DeepSeek `deepseek-flash`（OpenAI 兼容协议）
 
