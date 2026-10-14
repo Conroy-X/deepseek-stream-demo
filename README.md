@@ -124,6 +124,30 @@ python chat.py
 
 ---
 
+## 🛡️ 提交守门员（pre-commit hook）
+
+第 1 条铁律已经**交给机器执行**了 —— 靠人记得迟早会手滑，一次失误就得吊销重建密钥。
+
+`.githooks/pre-commit` 会在每次 commit 前拦住三类东西：
+
+| 拦什么 | 规则 |
+| --- | --- |
+| 敏感文件 | `.env`（放行 `.env.example`）、`.venv/`、`logs/`、`*.pem` / `*.key`、`id_rsa` / `id_ed25519`、`.git-credentials` |
+| 密钥内容 | 任何新增行里形如 `sk-` + 20 位以上的字符串（命中时会打码显示） |
+| 大文件 | 单个文件 >5MB（防止模型/数据集/依赖误入） |
+
+**新克隆后启用一次**（`core.hooksPath` 是本机配置，不会跟着仓库走）：
+
+```bash
+git config core.hooksPath .githooks
+```
+
+**临时跳过**（确认无风险时）：`git commit --no-verify`
+
+> 实测（2026-10-14）：假密钥 → 拦截；`git add -f .env` → 拦截；干净提交 → 放行。
+
+---
+
 ## 📚 官方资料入口（收藏这几个就够）
 
 - [DeepSeek API 文档](https://api-docs.deepseek.com/zh-cn/) ｜ [模型与价格](https://api-docs.deepseek.com/zh-cn/quick_start/pricing) ｜ [错误码](https://api-docs.deepseek.com/zh-cn/quick_start/error_codes)

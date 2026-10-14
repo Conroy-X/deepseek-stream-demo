@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+# ============================================================================
+#  AI Journey · 提交前守门员（pre-commit hook）
+#
+#  作用：在 commit 真正发生之前，拦住三类不该进仓库的东西
+#    1. 敏感文件：.env / .venv / logs / 私钥 / 证书
+#    2. 密钥内容：任何形如 sk-xxxxxxxx（20 位以上）的字符串
+#    3. 大文件：>5MB（防止误把模型、数据集、venv 塞进来）
+#
+#  为什么需要它：靠人"记得不要传密钥"迟早会出事（一次手滑就得吊销重建）。
+#  把它交给机器，是唯一可靠的办法。
+#
+#  安装（克隆后执行一次）：
+#      git config core.hooksPath .githooks
+#  临时跳过（确认无风险时）：
+#      git commit --no-verify
+# ============================================================================
+set -uo pipefail
+
+readonly RED=$'\033[31m'; readonly YELLOW=$'\033[33m'; readonly DIM=$'\033[2m'; readonly NC=$'\033[0m'
+
+fail() {
+  printf '%s🚫 提交被拦截：%s%s\n' "$RED" "$1" "$NC" >&2
+  exit 1
+}
+
+# 只看新增/修改的文件（--diff-filter=ACM，排除删除项）
+staged_files=$(git diff --cached --name-only --diff-filter=ACM)
+
+# ---------------------------------------------------------------------------
+# 1) 敏感文件黑名单
+#    注意：.env.example 必须放行（它是模板，不含真实密钥）
+# ---------------------------------------------------------------------------
+blocked=$(printf '%s\n' "$staged_files" \
+  | grep -E '(^|/)\.env$|(^|/)\.env\.(local|prod|production|dev|development|test)$|(^|/)\.venv/|(^|/)venv/|(^|/)logs?/|__pycache__|\.(pem|key|p12|pfx)$|(^|/)id_(rsa|ed25519|ecdsa)$|(^|/)\.git-credentials$' \
+  || true)
+
+if [ -n "$blocked" ]; then
+  printf '%s以下文件按仓库规矩不允许提交：%s\n%s\n' "$YELLOW" "$NC" "$blocked" >&2
+  fail "命中敏感文件黑名单（密钥 / 虚拟环境 / 日志 / 私钥）"
+fi
+
+# ---------------------------------------------------------------------------
+# 2) 密钥内容扫描（只扫本次新增的行，避免历史噪音）
+# ---------------------------------------------------------------------------
+key_hits=$(git diff --cached -U0 \
+  | grep -E '^\+' \
+  | grep -vE '^\+\+\+' \
+  | grep -oE 'sk-[A-Za-z0-9_-]{20,}' \
+  | sort -u || true)
+
+if [ -n "$key_hits" ]; then
+  printf '%s检测到疑似 API Key（中段已隐去）：%s\n' "$YELLOW" "$NC" >&2
+  printf '%s\n' "$key_hits" | sed -E 's/^(sk-.{4}).*(.{4})$/\1……\2/' >&2
+  printf '%s真要用它，请放进 .env（.env 已在忽略名单里）。%s\n' "$DIM" "$NC" >&2
+  fail "疑似密钥出现在提交内容里"
+fi
+
+# ---------------------------------------------------------------------------
+# 3) 大文件守卫
+# ---------------------------------------------------------------------------
+big_files=""
+while IFS= read -r f; do
+  [ -z "$f" ] && continue
+  [ -f "$f" ] || continue
+  size=$(stat -c%s "$f" 2>/dev/null || echo 0)
+  if [ "$size" -gt 5242880 ]; then
+    big_files="${big_files}${f} ($((size / 1048576))MB)\n"
+  fi
+done <<< "$staged_files"
+
+if [ -n "$big_files" ]; then
+  printf '%s发现较大文件（>5MB）：%s\n%b\n' "$YELLOW" "$NC" "$big_files" >&2
+  printf '%s确认不是误提交的数据/模型/依赖，再执行 git commit --no-verify 跳过。%s\n' "$DIM" "$NC" >&2
+  fail "大文件需要人工确认"
+fi
+
+printf '%s✅ 守门员通过：无敏感文件、无密钥、无异常大文件%s\n' "$DIM" "$NC"
+exit 0
