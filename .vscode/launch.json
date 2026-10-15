@@ -150,6 +150,68 @@
             "console": "integratedTerminal",
             "justMyCode": true
         }
-
+,
+        {
+            "name": "⑫ day05 · 三模式抽取对比",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/day05-structured/extract.py",
+            "args": [],
+            "cwd": "${workspaceFolder}/day05-structured",
+            "python": "${workspaceFolder}/day05-structured/.venv/bin/python",
+            "envFile": "${workspaceFolder}/day05-structured/.env",
+            "env": { "PYTHONUNBUFFERED": "1", "LANG": "C.UTF-8" },
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "⑬ day05 · 10 轮通过率（完成标准）",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/day05-structured/extract.py",
+            "args": ["--mode", "schema", "--rounds", "10"],
+            "cwd": "${workspaceFolder}/day05-structured",
+            "python": "${workspaceFolder}/day05-structured/.venv/bin/python",
+            "envFile": "${workspaceFolder}/day05-structured/.env",
+            "env": { "PYTHONUNBUFFERED": "1", "LANG": "C.UTF-8" },
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "⑭ day05 · 对抗实验（非简历输入）",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/day05-structured/extract.py",
+            "args": ["--adversarial"],
+            "cwd": "${workspaceFolder}/day05-structured",
+            "python": "${workspaceFolder}/day05-structured/.venv/bin/python",
+            "envFile": "${workspaceFolder}/day05-structured/.env",
+            "env": { "PYTHONUNBUFFERED": "1", "LANG": "C.UTF-8" },
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "⑮ day05 · 重试闭环（选做）",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/day05-structured/retry_extract.py",
+            "args": ["--dirty"],
+            "cwd": "${workspaceFolder}/day05-structured",
+            "python": "${workspaceFolder}/day05-structured/.venv/bin/python",
+            "envFile": "${workspaceFolder}/day05-structured/.env",
+            "env": { "PYTHONUNBUFFERED": "1", "LANG": "C.UTF-8" },
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "⑯ day05 · 模型自检（不花钱）",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/day05-structured/models.py",
+            "cwd": "${workspaceFolder}/day05-structured",
+            "python": "${workspaceFolder}/day05-structured/.venv/bin/python",
+            "console": "integratedTerminal",
+            "justMyCode": true
+        }
     ]
 }
