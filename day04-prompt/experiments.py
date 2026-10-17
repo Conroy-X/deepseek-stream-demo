@@ -37,23 +37,84 @@ LOGS = ROOT / "logs"
 
 
 def parse_args() -> argparse.Namespace:
+    """解析命令行参数。
+
+    ┌─ argparse 是什么？────────────────────────────────────────────────┐
+    │ Python 标准库的命令行解析器。你敲                                   │
+    │     python experiments.py fewshot --cases 2 --dry-run              │
+    │ 它负责把这串字符变成程序里的变量，顺便帮你做类型转换、默认值、       │
+    │ 非法值报错。相当于 Node 里的 commander / yargs。                    │
+    └────────────────────────────────────────────────────────────────────┘
+
+    解析结果是一个 Namespace 对象，属性名 = 参数名（中划线变下划线）：
+        args.exp  args.cases  args.max_tokens  args.dry_run ...
+    所以 `--max-tokens 400` 在代码里用 `ARGS.max_tokens` 取。
+    """
+    # prog 名 + 描述只会显示在 --help 里，不影响运行
     p = argparse.ArgumentParser(description="Day 4 Prompt 实验台")
+
+    # ---- ① 位置参数 exp（不带 -- 前缀的那个）---------------------------
+    # 你敲 `python experiments.py fewshot` 时，"fewshot" 就落在 exp 上。
     p.add_argument(
         "exp",
+        # nargs="?" 表示「最多 1 个、可以不传」：
+        #   python experiments.py            → exp = "variants"（走 default）
+        #   python experiments.py fewshot    → exp = "fewshot"
+        #   python experiments.py a b        → 报错（多了，装不下）
+        # 对比：nargs="*" 是「要几个都行」，nargs=3 是「必须正好 3 个」。
         nargs="?",
+        # 不传时的默认值：什么都不敲 = 跑 variants 实验
         default="variants",
+        # choices = 白名单。传了白名单之外的值（如 `python experiments.py foo`）
+        # argparse 直接报错退出，不用我们自己写 if 判断。
+        # 这就是为什么脚本能保证 exp 一定是这五个值之一。
         choices=["variants", "fewshot", "system", "temperature", "all"],
         help="跑哪个实验",
     )
+
+    # ---- ② 可选参数（--开关）-------------------------------------------
+    # 注意三种典型写法，后面 90 天会一直用到：
+
+    # 写法 A：带值 + 类型转换
+    # `--cases 2` → 字符串 "2" 经 type=int 变成数字 2。
+    # 不写 type 的话拿到的是字符串，做切片 CASES[:'2'] 会炸。
+    # default=len(prompts.CASES) 是「运行时求值」：
+    #   prompts.CASES 有 5 条用例，所以默认 = 5（全用）。
+    #   --cases 2 就是"只用前 2 条"，省钱用的。
     p.add_argument("--cases", type=int, default=len(prompts.CASES), help="用前 N 条用例")
+
+    # 写法 A'：带值 + 默认 None =「用户没传就沿用别处的默认」
+    # 这里 None 会被传给 LLMClient(model=None)，LLMClient 内部再落到
+    # .env 里的 DEEPSEEK_MODEL（deepseek-flash）。
+    # 好处：这个脚本不写死模型，换模型只改 .env 不改代码。
     p.add_argument("--model", default=None)
+
+    # 写法 A''：带值 + 固定默认
+    # max_tokens=400：Day 3 实测推理模型会用掉 60~100 推理 token，
+    # 400 给分类任务留了余量，又不至于截断。
     p.add_argument("--max-tokens", type=int, default=400)
+
+    # type=float：`--temperature 0.8` → 0.8（浮点）。default=0.3 是实验基线。
     p.add_argument("--temperature", type=float, default=0.3)
+
+    # 只有 temperature 实验用到（每个温度重复跑几遍看漂移）
     p.add_argument("--repeat", type=int, default=3, help="temperature 实验的重复次数")
+
+    # 写法 B：布尔开关（不带值）
+    # `action="store_true"`：命令行里出现了 --dry-run，值就是 True；没出现就是 False。
+    # 敲 `python experiments.py --dry-run` → ARGS.dry_run == True（注意中划线变下划线）
+    # 敲 `python experiments.py`            → ARGS.dry_run == False
+    # 不能写 `--dry-run true`，这个开关不接受值。
     p.add_argument("--dry-run", action="store_true", help="只拼 Prompt 不调用 API")
+
+    # parse_args() 才是真正去读 sys.argv（命令行参数列表）的那一步。
+    # 传了非法值（choices 之外、类型转不过来）时，在这里报错并退出（exit code 2）。
     return p.parse_args()
 
 
+# 模块级调用：import 本文件的时候就会执行（不只是 python 直接运行时）。
+# 后面所有函数都直接引用全局 ARGS（如 ARGS.max_tokens、ARGS.dry_run），
+# 不用一层层传参——小脚本这么写省事；正式工程会放进 main() 里，方便测试。
 ARGS = parse_args()
 
 
