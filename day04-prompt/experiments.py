@@ -401,48 +401,94 @@ def exp_temperature(client: LLMClient) -> list[dict]:
 # 主流程
 # ---------------------------------------------------------------------------
 def main() -> None:
+    """主流程：建客户端 → 跑实验 → 记录结果。
+
+    整体就三步，读的时候脑子里挂着这条主线：
+        ① 建一次 LLMClient（四个实验共用，省得重复初始化）
+        ② 按命令行选实验，逐个跑
+        ③ 跑完把所有结果存成 JSON 到 logs/
+    """
+    # ---- ① 建客户端 -------------------------------------------------------
+    # 把命令行参数"注入"到客户端：模型/温度/max_tokens 一次配好，
+    # 后面所有实验都用同一个 client（同一个 .usage 计数器）。
+    # 注意 ARGS.model 可能是 None —— LLMClient 内部会落到 .env 的默认模型
+    # （这就是 parse_args 注释里说的"默认值级联"）。
     try:
         client = LLMClient(model=ARGS.model, temperature=ARGS.temperature, max_tokens=ARGS.max_tokens)
     except LLMConfigError as exc:
+        # 配置错误（没 Key / 占位 Key）不该拿 traceback 吓人：
+        # 打一句人话，然后以非零码退出（1 = 出错，方便外层脚本判断成败）。
         console.print(f"[red]❌ 配置错误：{exc}[/red]")
         raise SystemExit(1)
 
+    # 开跑前先回显本次关键参数（习惯问题）：
+    # 实验结论只有在"参数明确"的前提下才有意义，回头翻 logs 也要能对上。
     console.print(f"[dim]模型 {client.model} ｜ temperature {ARGS.temperature} ｜ max_tokens {ARGS.max_tokens}[/dim]")
 
+    # ---- ② 选实验并执行 ---------------------------------------------------
+    # 字典当"分发器"（dispatch table）：键 = 命令行里的实验名，值 = 函数本身。
+    # Python 里函数是一等公民，能像值一样存进 dict —— 这是替代
+    #   if exp == "variants": ... elif exp == "fewshot": ...
+    # 一长串 if/elif 的写法。Node 里对应"策略表"/handlers 对象。
     runner = {
         "variants": exp_variants,
         "fewshot": exp_fewshot,
         "system": exp_system,
         "temperature": exp_temperature,
     }
+    # list(dict) 得到键列表（保持定义顺序：variants→fewshot→system→temperature）。
+    # exp == "all" → 四个实验全跑；否则只跑选中的那一个。
+    # 注意 [ARGS.exp] 把单个字符串包成列表：下面的 for 循环就只需要写一份，
+    # 不用区分"跑一个"和"跑多个"两种情况。
     exps = list(runner) if ARGS.exp == "all" else [ARGS.exp]
 
     all_rows: list[dict] = []
     for name in exps:
+        # 清零 usage 计数器 → 每个实验结束时打印的是"本实验"的用量，
+        # 而不是从程序启动以来的累计值。
+        # （llm.Usage 没有提供 reset() 方法，所以手动把四个字段归零；
+        #   想改进的话可以给 Usage 加个 reset() —— 这就是重构的入口。）
         client.usage.calls = 0
         client.usage.prompt_tokens = 0
         client.usage.completion_tokens = 0
         client.usage.reasoning_tokens = 0
+        # runner[name] 取出函数，(client) 立刻调用：
+        # 每个实验函数拿同一个 client，返回"变体×用例"的所有结果行
         rows = runner[name](client)
+        # 汇总进总表，循环结束后统一写盘
         all_rows += rows
         if not ARGS.dry_run:
             console.print(f"\n[bold green]{name} 本次用量：[/bold green]{client.usage.summary()}\n")
 
+    # ---- ③ 结果落盘 -------------------------------------------------------
+    # 两个条件：真跑过（非 dry-run）且有数据（all_rows 非空；
+    # dry-run 时实验函数返回的是空列表，这里自然跳过）。
     if not ARGS.dry_run and all_rows:
         path = save_log(
+            # 文件名形如 experiment-variants-20261014-230045.json（save_log 自动加时间戳）
             "experiment-" + ARGS.exp,
             {
+                # timespec="seconds"：精确到秒就够，微秒是噪音
                 "time": datetime.now().isoformat(timespec="seconds"),
                 "model": client.model,
                 "temperature": ARGS.temperature,
                 "max_tokens": ARGS.max_tokens,
+                # 列表推导式（list comprehension）：Python 最常用的"map+瘦身"写法。
+                # 四个实验函数返回的行结构统一（variant_key/label/output/
+                # compliant/correct/meta），所以这里能一段代码处理所有实验。
+                # Node 对应：rows.map(r => ({...}))
                 "rows": [
                     {
                         "variant": r["variant_key"],
+                        # label 形如 "v0_baseline\n上传头像总是失败…"，
+                        # split("\n")[-1] 取最后一段 = 纯输入文本（去掉变体名前缀）
                         "input": r["label"].split("\n")[-1],
                         "output": r["output"],
                         "compliant": r["compliant"],
                         "correct": r["correct"],
+                        # meta 里是 token/耗时等调用元数据；
+                        # 调用失败的行没有 meta（None），所以逐字段兜底成 null，
+                        # 否则 r["meta"].xxx 会在 None 上炸 AttributeError。
                         "completion_tokens": r["meta"].completion_tokens if r["meta"] else None,
                         "reasoning_tokens": r["meta"].reasoning_tokens if r["meta"] else None,
                         "elapsed_ms": r["meta"].elapsed_ms if r["meta"] else None,
@@ -454,5 +500,12 @@ def main() -> None:
         console.print(f"[dim]结果已存 {path}（Day 4 笔记可以直接引用这些数字）[/dim]")
 
 
+# ── Python 的经典入口惯用法 ────────────────────────────────────────────────
+# `python experiments.py xxx` 直接运行时，这个文件的 __name__ 是 "__main__"，
+# 条件成立 → 执行 main()。
+# 被别处 `import experiments`（比如 selfcheck 复用函数）时，__name__ 是
+# "experiments"，条件不成立 → 不会执行 main()。
+# 一句话：保证"直接运行才跑主流程，被当库导入时不跑"。
+# Node 里最接近的对应物：if (require.main === module) { ... }
 if __name__ == "__main__":
     main()
