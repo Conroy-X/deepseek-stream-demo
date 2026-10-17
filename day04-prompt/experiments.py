@@ -132,20 +132,44 @@ def estimate_cost(calls: int, input_tokens: int, output_tokens: int) -> float:
 
 
 def ask(client: LLMClient, variant: prompts.PromptVariant, case: dict[str, str]) -> dict:
-    """跑一个变体 × 一条用例，返回结构化结果（方便统计）。"""
+    """跑一个变体 × 一条用例，返回结构化结果（方便统计）。
+
+    这是所有实验共用的「最小执行单元」：variants / fewshot / system
+    三个实验都靠它发请求、收结果。返回的 dict 结构是整个实验台的
+    「通用行格式」，summarize 分组和 main 落盘都认这个格式。
+    """
+    # ① render：把变体模板里的 {input} 占位符替换成这条用例的真实文本，
+    #    得到 (system, user) 两个字符串 —— 就是最终发给模型的两条消息。
     system, user = prompts.render(variant, case["input"])
     try:
+        # ② 真正调 LLM。chat_one 是 llm.py 里的单轮便捷方法（system + user）。
+        #    system or None：v0/v6 这类变体的 system 是空串 ""，
+        #    空串 or None → None（Python 的 or 短路：空串是假值），
+        #    这样就不会给 API 发一条空的 system 消息。
+        #    warn_truncated=False：实验场景不需要截断告警刷屏。
         text = client.chat_one(
             user, system or None, warn_truncated=False, max_tokens=ARGS.max_tokens
         )
     except LLMCallError as exc:
+        # ③ 失败也返回「同样形状」的行（ok=False、meta=None），不抛异常：
+        #    这样统计和表格代码不需要区分成功/失败两条路径。
+        #    思路是"错误也是数据"——失败的调用照样进结果表，看得见、算得进。
         return {"output": f"<失败: {exc}>", "ok": False, "compliant": False, "correct": False, "meta": None}
 
+    # ④ 成功路径：client.meta 是 llm.py 每次调用后更新的元数据
+    #    （token 用量/耗时/finish_reason/trace_id），取引用即可
     meta = client.meta
     return {
         "output": text,
+        # ok=True 显式写出来：失败分支返回 ok=False，两侧行形状必须完全一致，
+        # summarize 里 i["ok"] 才不会 KeyError（刚才注释重写时漏了这行，跑真实
+        # 实验立刻炸出来——这也正是 selfcheck 没覆盖到的盲区：它 mock 了 ask，
+        # 没测真实返回行的键完整性。留个教训：改"共用函数"必须跑一遍真实链路）
         "ok": True,
+        # 合规 = 输出格式严格合法（恰好是三个类别词之一）—— 格式层面
         "compliant": prompts.is_compliant(text),
+        # 正确 = 归一化后的类别与用例期望一致 —— 内容层面
+        # 注意两者分开算：Day 4 最大的发现就是"答对了"≠"能用"
         "correct": prompts.normalize(text) == case["expect"],
         "meta": meta,
     }
@@ -175,20 +199,36 @@ def print_results_table(rows: list[dict], title: str) -> None:
 
 
 def summarize(rows: list[dict], group_key: str = "variant") -> list[dict]:
-    """按变体聚合：合规率、准确率、平均输出 token。"""
+    """按变体聚合：合规率、准确率、平均输出 token。
+
+    输入是 ask() 产出的「行」列表，输出是每个变体一行的统计。
+    这就是 Day 4 的核心方法论：把"哪个 Prompt 更好"从主观印象
+    变成 合规率 / 准确率 / 成本 三列数字。
+    """
+    # ---- 第一步：分组 ----
+    # setdefault(key, [])：字典里没有这个键就先放个空列表，再 append。
+    # 等价于 Node 里 reduce 累积成 Map<variant, rows[]>。
+    # group_key 做成了参数：默认按 "variant" 分组，需要时也能按别的字段分组。
     groups: dict[str, list[dict]] = {}
     for r in rows:
         groups.setdefault(r[group_key], []).append(r)
 
     stats = []
     for name, items in groups.items():
+        # 只统计成功调用的行 —— 失败行的 meta 是 None，直接取 token 会炸
         ok_items = [i for i in items if i["ok"]]
         stats.append(
             {
                 "variant": name,
-                "n": len(items),
+                "n": len(items),  # 总次数（含失败）
+                # sum(布尔列表)：True 当 1 相加 = 成功次数，除以总数即比率。
+                # 注意分母是 len(items) 而不是 len(ok_items)：
+                # 失败按"不合规/不正确"计入，让失败真实拉低指标——
+                # 如果用 ok_items 做分母，失败会被悄悄"洗掉"。
                 "compliance": sum(i["compliant"] for i in items) / len(items),
                 "accuracy": sum(i["correct"] for i in items) / len(items),
+                # statistics.mean = 算术平均；空列表会抛 StatisticsError，
+                # 所以用条件表达式兜底成 0
                 "avg_out": statistics.mean([i["meta"].completion_tokens for i in ok_items]) if ok_items else 0,
                 "avg_ms": statistics.mean([i["meta"].elapsed_ms for i in ok_items]) if ok_items else 0,
             }
@@ -312,34 +352,57 @@ def exp_fewshot(client: LLMClient) -> list[dict]:
 # 实验 3：指令放 System vs 放 User（必做，直击 Day 4 完成标准）
 # ---------------------------------------------------------------------------
 def exp_system(client: LLMClient) -> list[dict]:
+    """实验 3：同一份五段式指令，分别放 System 和放 User，对比效果。
+
+    实验设计的灵魂在 prompts.py 里：
+        v5_full                → 五段式文本放 system，user 只放问题
+        v6_instruction_in_user → 完全相同的五段式文本放 user，system 留空
+    两者文字内容一样、只有位置不同 —— 这才是"控制变量"：
+    如果结果有差异，唯一可能的原因就是"放的位置"。
+    """
+    # 用例切片：CASES[:N]。ARGS.cases 来自命令行 --cases，默认全部（5 条）。
+    # 本实验只关心"位置差异"，不需要太多用例，跑 2 条也够看趋势（省 token）。
     cases = prompts.CASES[: ARGS.cases]
+    # VARIANTS_BY_KEY 是 {key: 变体} 的字典（prompts.py 底部建好），
+    # 按 key 直接取，比遍历 VARIANTS 列表找更直观。
     pair = [prompts.VARIANTS_BY_KEY["v5_full"], prompts.VARIANTS_BY_KEY["v6_instruction_in_user"]]
 
     console.print(
         f"\n[bold cyan]实验 3 · 指令放 System vs 放 User[/bold cyan]：同一份五段式文本，只换位置\n"
     )
+    # dry-run 分支：不花一分钱先看看两组 Prompt 长什么样（每个实验函数都有这段）
     if ARGS.dry_run:
         for v in pair:
             console.print(f"[bold]{v.name}[/bold]\n  system = {short(v.system, 80)}\n  user   = {short(v.user, 80)}\n")
-        return []
+        return []  # 空列表 → main 里 all_rows 为空，自然跳过落盘
 
     rows: list[dict] = []
+    # 双层循环：2 个变体 × N 条用例，每个组合都是一次真实 API 调用
     for v in pair:
         for case in cases:
+            # ask() 干全部脏活：render → 调 LLM → 判合规/正确 → 打包成一行 dict
             r = ask(client, v, case)
+            # ask 本身不知道"变体"维度的信息，这里补上：
+            # variant/variant_key 供 summarize 分组，label 供表格显示
             r["variant"], r["variant_key"] = v.name, v.key
+            # label 两行：第一行变体 key，第二行截断的用例文本（适配窄表格列）
             r["label"] = f"{v.key}\n{short(case['input'], 14)}"
             rows.append(r)
 
+    # 先打印逐条明细（每一行长什么样），再打印聚合汇总（每变体一行统计）
     print_results_table(rows, "实验 3 · 逐条结果")
     print_summary(summarize(rows), "实验 3 · 汇总（重点看平均输入 token 的差距）")
 
+    # ---- 单独算一次差值，给出"数字结论"，不让读者自己肉眼比 ----
     s_stats = summarize(rows)
+    # len==2 确保两个变体都出了数据；avg_out 非 0 排除"全失败"的退化情况
     if len(s_stats) == 2 and s_stats[1]["avg_out"]:
+        # {diff:+.0f} 里的 + 号：正数也带符号（如 +35），符合"差值"的语义
         diff = s_stats[1]["avg_out"] - s_stats[0]["avg_out"]
         console.print(
             f"\n[dim]两者输出 token 差 {diff:+.0f}；再看 run 输出的 usage 里 prompt_tokens 的差距。[/dim]"
         )
+    # 打印"预登记"的结论方向 —— 好的实验习惯：先写预期，再看数据是否支持它
     console.print(
         "[dim]结论方向：短期单轮任务里两者效果接近；差异会在**多轮对话**和**指令优先级**上放大 —— "
         "System 是长期规则（且可能被缓存/不计入重发），User 是本次输入。Day 10 会用多轮场景验证。[/dim]"
@@ -347,8 +410,6 @@ def exp_system(client: LLMClient) -> list[dict]:
     return rows
 
 
-# ---------------------------------------------------------------------------
-# 实验 4：temperature 对合规率的影响（选做）
 # ---------------------------------------------------------------------------
 def exp_temperature(client: LLMClient) -> list[dict]:
     cases = prompts.CASES[: ARGS.cases]

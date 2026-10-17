@@ -94,7 +94,14 @@ def build_five_part(
 
 
 def render(variant: PromptVariant, input_text: str) -> tuple[str, str]:
-    """把变体里的 {input} 占位符替换成真实输入。"""
+    """把变体里的 {input} 占位符替换成真实输入。
+
+    为什么要占位符？变体是「模板」—— 同一条用例要塞进 7 个不同模板做对比，
+    模板里写死输入就没法复用了。render 就是"模板 + 数据 → 实际消息"的组装动作。
+
+    用 str.replace 而不是 str.format 的原因：模板正文里有大量花括号
+    （JSON 示例等），format 会把它们当占位符直接报错；replace 只认 {input}。
+    """
     return (
         variant.system.replace("{input}", input_text),
         variant.user.replace("{input}", input_text),
