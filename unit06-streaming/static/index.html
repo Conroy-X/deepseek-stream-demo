@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Unit 6 · 流式输出实验台</title>
+<style>
+  :root { --bg:#0f1115; --panel:#171a21; --line:#2a2f3a; --text:#e6e8ee; --dim:#8b93a5; --accent:#4d9fff; --ok:#3ddc97; --warn:#ffb454; --err:#ff6b6b; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:14px/1.65 -apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; }
+  .wrap { max-width: 940px; margin: 0 auto; padding: 28px 20px 60px; }
+  h1 { font-size:20px; margin:0 0 4px; }
+  .sub { color:var(--dim); font-size:13px; margin-bottom:22px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:16px; margin-bottom:16px; }
+  .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  label { color:var(--dim); font-size:13px; }
+  input[type=text] { flex:1; min-width:220px; background:#0d0f14; border:1px solid var(--line); color:var(--text);
+                     border-radius:7px; padding:9px 11px; font-size:14px; outline:none; }
+  input[type=text]:focus { border-color:var(--accent); }
+  button { background:var(--accent); color:#04121f; border:0; border-radius:7px; padding:9px 16px;
+           font-size:14px; font-weight:600; cursor:pointer; }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+  button.ghost { background:transparent; color:var(--text); border:1px solid var(--line); font-weight:500; }
+  .out { background:#0b0d12; border:1px solid var(--line); border-radius:8px; padding:14px;
+         min-height:120px; white-space:pre-wrap; word-break:break-word; font-size:14.5px; }
+  .cursor::after { content:"▍"; color:var(--accent); animation: blink 1s steps(2) infinite; }
+  @keyframes blink { 50% { opacity:0; } }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:10px; margin-top:12px; }
+  .stat { background:#0d0f14; border:1px solid var(--line); border-radius:7px; padding:8px 11px; }
+  .stat .k { color:var(--dim); font-size:11px; letter-spacing:.4px; text-transform:uppercase; }
+  .stat .v { font-size:16px; font-variant-numeric:tabular-nums; }
+  .stat .v.ok { color:var(--ok); }
+  .tag { display:inline-block; font-size:11px; padding:2px 7px; border-radius:99px; border:1px solid var(--line); color:var(--dim); }
+  .tag.live { border-color:var(--ok); color:var(--ok); }
+  .log { background:#0b0d12; border:1px solid var(--line); border-radius:8px; padding:10px;
+         max-height:190px; overflow:auto; font:12px/1.5 ui-monospace,Consolas,monospace; color:var(--dim); }
+  .log .t { color:var(--accent); }
+  .err { color:var(--err); }
+  h2 { font-size:14px; margin:0 0 12px; color:var(--dim); font-weight:600; letter-spacing:.3px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Unit 6 · 流式输出实验台</h1>
+  <div class="sub">
+    三件事在这里能看清：① SSE 报文怎么切分　② 首字延迟(TTFT) 与总耗时的区别　③ 客户端断开时后端会怎样
+  </div>
+
+  <!-- 实验一：不花钱，看报文 -->
+  <div class="card">
+    <h2>实验一 · 纯文本流式（不需要 API Key）</h2>
+    <div class="row">
+      <input type="text" id="demoText" value="流式输出就是把一个回答切成很多小块，边生成边发送。" />
+      <button id="btnDemo">开始</button>
+    </div>
+    <div class="out" id="demoOut" style="margin-top:12px"><span style="color:var(--dim)">点击「开始」，观察每个字符是如何逐个出现的</span></div>
+    <div class="stats">
+      <div class="stat"><div class="k">已收到事件</div><div class="v" id="demoCount">0</div></div>
+      <div class="stat"><div class="k">首字延迟</div><div class="v" id="demoTtft">—</div></div>
+      <div class="stat"><div class="k">总耗时</div><div class="v" id="demoTotal">—</div></div>
+    </div>
+    <div class="log" id="demoLog" style="margin-top:10px">报文会实时显示在这里…</div>
+  </div>
+
+  <!-- 实验二：真模型 -->
+  <div class="card">
+    <h2>实验二 · 真实模型流式（需要 API Key）</h2>
+    <div class="row">
+      <input type="text" id="q" value="用三句话解释什么是 Server-Sent Events" />
+      <button id="btnStream">流式请求</button>
+      <button class="ghost" id="btnStop" disabled>中途断开</button>
+    </div>
+    <div class="out" id="out" style="margin-top:12px"><span style="color:var(--dim)">等待请求…</span></div>
+    <div class="stats">
+      <div class="stat"><div class="k">首字延迟 TTFT</div><div class="v ok" id="ttft">—</div></div>
+      <div class="stat"><div class="k">总耗时</div><div class="v" id="total">—</div></div>
+      <div class="stat"><div class="k">收到分块</div><div class="v" id="chunks">0</div></div>
+      <div class="stat"><div class="k">状态</div><div class="v" id="status"><span class="tag">空闲</span></div></div>
+    </div>
+    <div class="log" id="log" style="margin-top:10px">SSE 事件会实时显示在这里…</div>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+/* ------------------------------------------------------------------
+   SSE 解析器：这是本单元最核心的一小段代码
+   ------------------------------------------------------------------
+   报文格式：  data: <json>\n\n
+   要点：
+     1. 一次 read() 可能拿到半个事件，也可能拿到好几个事件 → 必须缓冲
+     2. 用 "\n\n" 切分事件，最后一段可能不完整 → 留在缓冲里等下一次
+     3. 不能假设每个 chunk 正好是一个完整事件
+------------------------------------------------------------------ */
+async function* parseSSE(response) {
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      let idx;
+      while ((idx = buffer.indexOf("\n\n")) !== -1) {
+        const raw = buffer.slice(0, idx);
+        buffer = buffer.slice(idx + 2);
+        if (!raw.trim()) continue;
+        const payload = raw
+          .split("\n")
+          .filter((l) => l.startsWith("data:"))
+          .map((l) => l.slice(5).trimStart())
+          .join("\n");
+        if (payload) yield payload;
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+function now() { return performance.now() / 1000; }
+function fmt(s) { return s.toFixed(2) + "s"; }
+function pushLog(el, text, cls = "") {
+  const div = document.createElement("div");
+  div.className = cls;
+  div.textContent = text;
+  el.appendChild(div);
+  el.scrollTop = el.scrollHeight;
+}
+
+/* ---------------- 实验一 ---------------- */
+$("btnDemo").onclick = async () => {
+  const btn = $("btnDemo");
+  btn.disabled = true;
+  const out = $("demoOut");
+  const log = $("demoLog");
+  out.textContent = "";
+  log.textContent = "";
+  $("demoCount").textContent = "0";
+  $("demoTtft").textContent = "—";
+  $("demoTotal").textContent = "—";
+
+  const t0 = now();
+  let count = 0;
+  let ttft = null;
+
+  try {
+    const url = "/stream/demo?delay=0.06&text=" + encodeURIComponent($("demoText").value);
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error("HTTP " + resp.status);
+
+    for await (const payload of parseSSE(resp)) {
+      if (payload === "[DONE]") { pushLog(log, `[DONE] 结束标记`, "t"); break; }
+      const ev = JSON.parse(payload);
+      count++;
+      $("demoCount").textContent = count;
+
+      if (ev.type === "delta") {
+        if (ttft === null) { ttft = now() - t0; $("demoTtft").textContent = fmt(ttft); }
+        out.textContent += ev.content;
+        out.classList.add("cursor");
+        pushLog(log, `data: ${payload}`);
+      } else if (ev.type === "done") {
+        $("demoTotal").textContent = fmt(now() - t0);
+        pushLog(log, `data: ${payload}`, "t");
+      }
+    }
+  } catch (e) {
+    pushLog(log, "错误: " + e.message, "err");
+  } finally {
+    out.classList.remove("cursor");
+    btn.disabled = false;
+  }
+};
+
+/* ---------------- 实验二 ---------------- */
+let controller = null;
+
+$("btnStop").onclick = () => {
+  if (controller) {
+    controller.abort();
+    pushLog($("log"), "▶ 客户端主动 abort()，连接已断开", "t");
+  }
+};
+
+$("btnStream").onclick = async () => {
+  if (controller) controller.abort();
+  controller = new AbortController();
+
+  const btn = $("btnStream"), stop = $("btnStop");
+  btn.disabled = true; stop.disabled = false;
+  const out = $("out"), log = $("log");
+  out.innerHTML = ""; log.textContent = "";
+  $("chunks").textContent = "0";
+  $("ttft").textContent = "—";
+  $("total").textContent = "—";
+  $("status").innerHTML = '<span class="tag live">请求中</span>';
+
+  const t0 = now();
+  let count = 0, ttft = null;
+
+  try {
+    const resp = await fetch("/chat/stream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messages: [{ role: "user", content: $("q").value }],
+        temperature: 0.7,
+        max_tokens: 512,
+      }),
+      signal: controller.signal,
+    });
+    if (!resp.ok) throw new Error("HTTP " + resp.status);
+
+    for await (const payload of parseSSE(resp)) {
+      if (payload === "[DONE]") { pushLog(log, "[DONE]", "t"); break; }
+      const ev = JSON.parse(payload);
+      count++;
+      $("chunks").textContent = count;
+
+      if (ev.type === "first_token") {
+        ttft = now() - t0;
+        $("ttft").textContent = fmt(ttft);
+        pushLog(log, `first_token @ ${ev.ttft_seconds}s（服务端计时）`, "t");
+      } else if (ev.type === "delta") {
+        out.textContent += ev.content;
+        out.classList.add("cursor");
+      } else if (ev.type === "usage") {
+        pushLog(log, `usage: 输入 ${ev.prompt_tokens} / 输出 ${ev.completion_tokens} tokens`, "t");
+      } else if (ev.type === "done") {
+        $("total").textContent = fmt(now() - t0);
+        pushLog(log, `done @ ${ev.total_seconds}s，共 ${ev.total_chars} 字符`, "t");
+        $("status").innerHTML = '<span class="tag live">完成</span>';
+      } else if (ev.type === "error") {
+        pushLog(log, "服务端错误: " + ev.message, "err");
+        $("status").innerHTML = '<span class="tag">出错</span>';
+      }
+    }
+  } catch (e) {
+    if (e.name === "AbortError") {
+      pushLog(log, "已中断（服务端会检测到 disconnect 并停止生成）", "t");
+      $("status").innerHTML = '<span class="tag">已中断</span>';
+    } else {
+      pushLog(log, "错误: " + e.message, "err");
+      $("status").innerHTML = '<span class="tag">出错</span>';
+    }
+  } finally {
+    out.classList.remove("cursor");
+    btn.disabled = false; stop.disabled = true;
+    controller = null;
+  }
+};
+</script>
+</body>
+</html>

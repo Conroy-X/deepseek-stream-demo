@@ -29,7 +29,7 @@
 ├── unit03-cli-chat/           # ✅ Unit 3   CLI Chat
 ├── unit04-prompt/             # ✅ Unit 4   Prompt 实验台
 ├── unit05-structured/         # ✅ Unit 5   JSON 结构化输出
-├── unit06-streaming/          # ⬜ Unit 6   流式 / SSE
+├── unit06-streaming/          # ✅ Unit 6   流式 / SSE（后端 SSE + 浏览器实验台）
 ├── unit07-web-chat/           # ⬜ Unit 7   Next.js + FastAPI 打通
 ├── project1-ai-chat/          # ⬜ Unit 8–14   AI Chat 完整版
 ├── project2-knowledge-base/   # ⬜ Unit 15–30  企业知识库（RAG）
