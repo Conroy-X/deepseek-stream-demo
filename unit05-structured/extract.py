@@ -49,8 +49,8 @@ from models import RESUME_JSON_INSTRUCTION, Resume, build_extract_messages  # no
 
 console = Console()
 
-SAMPLE_RESUME = """张三（rik）
-邮箱：zhangsan@example.com ｜ 电话：138****0000
+SAMPLE_RESUME = """张三（示例）
+邮箱：zhangsan@example.com ｜ 电话：138****0000（示例，非真实号码）
 
 工作年限：6 年半
 
