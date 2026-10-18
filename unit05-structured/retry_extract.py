@@ -73,7 +73,8 @@ def extract_with_retry(client: LLMClient, resume_text: str, max_retries: int) ->
             history.append({"round": label, "ok": False, "error": str(exc)})
             console.print(f"[red]{label} 调用失败：{exc}[/red]")
             break
-
+        # 打印模型输出信息
+        console.print(Panel(raw, title=f"{label} 模型输出原文", border_style="blue"))
         try:
             resume = Resume.model_validate_json(raw)
             history.append({"round": label, "ok": True, "rounds_used": attempt})

@@ -13,9 +13,11 @@
 
 from __future__ import annotations
 
+import json
 import os
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Iterable
 
 from dotenv import load_dotenv
@@ -95,9 +97,9 @@ class Message:
 
 @dataclass
 class CallMeta:
-    """一次调用的元数据 —— Unit 4 的实验结论全靠它，别只看回答文本。"""
+    """一次调用的完整记录 —— 不只看解析结果，原始响应也留着。"""
 
-    text: str = ""
+    text: str = ""                      # 模型输出的原始字符串（未经任何解析！）
     finish_reason: str | None = None
     prompt_tokens: int = 0
     completion_tokens: int = 0
@@ -105,6 +107,28 @@ class CallMeta:
     elapsed_ms: float = 0.0
     trace_id: str | None = None
     truncated: bool = False
+    # --- 以下为「看到解析过程」所需 ---
+    request: dict = field(default_factory=dict)     # 发出去的请求体（含 messages）
+    raw_response: dict = field(default_factory=dict)  # 完整响应 JSON（choices/usage/…）
+    raw_headers: dict = field(default_factory=dict)   # HTTP 响应头
+    saved_path: str | None = None                     # 存盘位置
+
+    def raw_preview(self, n: int = 400) -> str:
+        """原始文本的可读预览，便于终端快速确认。"""
+        return self.text[:n] + ("…" if len(self.text) > n else "")
+
+
+def _save_raw(record: dict, tag: str = "call") -> str:
+    """把一次调用的完整请求/响应写到 logs/，返回路径。"""
+    if os.getenv("LLM_SAVE_RAW", "1") in ("0", "false", "False"):
+        return ""
+    log_dir = Path(__file__).resolve().parent / "logs"
+    log_dir.mkdir(exist_ok=True)
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    ms = int((time.time() % 1) * 1000)
+    path = log_dir / f"{stamp}-{ms:03d}-{tag}.json"
+    path.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
+    return str(path)
 
 
 class LLMClient:
@@ -184,6 +208,12 @@ class LLMClient:
         text = choice.message.content or ""
         truncated = choice.finish_reason == "length"
 
+        # 完整保留：响应体 / 响应头 / 请求体，全部可回看
+        try:
+            raw_json = resp.model_dump(mode="json")
+        except Exception:  # noqa: BLE001
+            raw_json = {"_note": "model_dump 失败", "repr": repr(resp)[:2000]}
+
         self.meta = CallMeta(
             text=text,
             finish_reason=choice.finish_reason,
@@ -193,6 +223,25 @@ class LLMClient:
             elapsed_ms=elapsed_ms,
             trace_id=dict(raw.headers).get("x-ds-trace-id"),
             truncated=truncated,
+            request=kwargs,
+            raw_response=raw_json,
+            raw_headers={k: v for k, v in dict(raw.headers).items()},
+        )
+        self.meta.saved_path = _save_raw(
+            {
+                "request": kwargs,
+                "response": raw_json,
+                "headers": self.meta.raw_headers,
+                "meta": {
+                    "finish_reason": self.meta.finish_reason,
+                    "elapsed_ms": round(elapsed_ms, 1),
+                    "prompt_tokens": self.meta.prompt_tokens,
+                    "completion_tokens": self.meta.completion_tokens,
+                    "reasoning_tokens": reasoning,
+                    "trace_id": self.meta.trace_id,
+                    "truncated": truncated,
+                },
+            }
         )
 
         if truncated and warn_truncated:

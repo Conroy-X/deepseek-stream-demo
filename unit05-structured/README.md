@@ -119,3 +119,74 @@ DeepSeek json_mode 的坑（官方文档明说的）：**必须在 Prompt 里显
 - 今天拿到的是"一次性完整 JSON"；Unit 6 的流式输出里，JSON 是**一块块到**的——到时候要用「累积缓冲 + 收完再解析」的策略
 - `retry_extract.py` 的"错误回喂"循环，Unit 13 做重试机制时升级成带退避的版本
 - Resume 模型 Unit 11 进 PostgreSQL 时直接变成表结构（Pydantic → SQLAlchemy 映射）
+
+---
+
+## 九、看原始响应（重要）
+
+只看到「解析后的结果」是不够的——你无法判断模型到底吐了什么、解析器做了什么。
+所以每次调用都会**把原始响应完整存到 `logs/`**，并可以打印到终端。
+
+### 两层日志
+
+| 文件 | 由谁产生 | 内容 |
+| --- | --- | --- |
+| `logs/*-call.json` | `llm.py` 每次调用自动写 | **完整 HTTP 响应体**（id/choices/usage/…）+ 响应头 + 请求体 + 元数据 |
+| `logs/*-extract.json` | `extract.py` 每次抽取自动写 | **模型原始输出字符串** + 解析结果 + 输入文本 + 元数据 |
+
+### 终端打印
+
+```bash
+# 每次抽取都打印「原始输出 → 解析步骤 → 解析结果」三段
+python extract.py --mode schema --show-raw
+
+# 不带 --show-raw 时，解析失败也会自动打印原始输出，方便排错
+```
+
+输出长这样：
+
+```
+──────────── schema 的原始响应 ────────────
+╭─── 模型返回的原始字符串（未经任何处理） ───╮
+│ {"name":"张三","email":"zhangsan@example.com",... │
+╰──────────────────────────────────────────╯
+─────────────── 解析过程 ───────────────
+  ① 剥离 markdown 围栏（如果有）
+  ② Resume.model_validate_json(raw) —— 一次完成「JSON 解析 + 类型校验 + 字段校验」
+  ③ 校验内容：必填/类型/枚举/范围/正则/多余字段
+─────────────── 解析结果 ───────────────
+╭─── Resume 对象（已校验，转回 dict） ───╮
+│ { "name": "张三", ... }                │
+╰────────────────────────────────────────╯
+```
+
+### 在代码里访问
+
+```python
+raw = client.chat_one(...)          # 模型输出的原始字符串
+client.meta.text                    # 同上（原始，未经解析）
+client.meta.raw_response            # 完整响应 JSON（含 usage、finish_reason）
+client.meta.raw_headers             # 响应头（含 x-ds-trace-id）
+client.meta.request                 # 发出去的请求体
+client.meta.saved_path              # 本次存盘位置
+```
+
+### 关闭存盘
+
+```bash
+LLM_SAVE_RAW=0 python extract.py --mode schema
+```
+
+`logs/` 已在 `.gitignore` 里，不会提交。想留档就挑一份复制到 `docs/`。
+
+### 一个值得看的细节
+
+打开任意 `*-call.json`，能直接看到 DeepSeek 返回的缓存命中情况：
+
+```json
+"prompt_cache_hit_tokens": 1408,
+"prompt_cache_miss_tokens": 186
+```
+
+同一个 System Prompt 反复调用时 `cache_hit` 会很高——这是**提示词缓存**在省钱，
+也是 Unit 61 成本优化要利用的机制。只看解析结果永远发现不了这个。

@@ -94,6 +94,64 @@ def parse_schema(text: str) -> Resume:
     return Resume.model_validate_json(clean)
 
 
+# ---------------------------------------------------------------------------
+# 原始输出与解析过程的可视化
+# ---------------------------------------------------------------------------
+def _save_extraction(record: dict) -> str:
+    """把「原始响应 + 解析结果」存到 logs/，方便事后对照。"""
+    import time as _t
+
+    log_dir = Path(__file__).resolve().parent / "logs"
+    log_dir.mkdir(exist_ok=True)
+    stamp = _t.strftime("%Y%m%d-%H%M%S")
+    ms = int((_t.time() % 1) * 1000)
+    path = log_dir / f"{stamp}-{ms:03d}-extract.json"
+    path.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
+    return str(path)
+
+
+def show_raw_and_parsed(mode: str, raw: str, result: object, meta) -> None:
+    """把「模型原始输出」和「解析后的对象」并列展示，看清解析到底做了什么。"""
+    console.rule(f"[bold]{mode}[/bold] 的原始响应")
+    console.print(Panel(raw, title="模型返回的原始字符串（未经任何处理）", border_style="dim", expand=False))
+
+    console.rule("[bold]解析过程[/bold]")
+    steps: list[str] = []
+    if mode == "naive":
+        steps.append("① json.loads(raw) —— 直接把原始字符串当 JSON 解析")
+    elif mode == "json_mode":
+        steps.append("① API 已保证是合法 JSON（response_format=json_object）")
+        steps.append("② json.loads(raw) —— 只做语法解析，**不检查字段**")
+    else:
+        steps.append("① 剥离 markdown 围栏（如果有）")
+        steps.append("② Resume.model_validate_json(raw) —— 一次完成「JSON 解析 + 类型校验 + 字段校验」")
+        steps.append("③ 校验内容：必填字段 / 类型 / 枚举 / 数值范围 / 正则 / 多余字段(extra=forbid)")
+    for s in steps:
+        console.print(f"  [cyan]{s}[/cyan]")
+
+    console.rule("[bold]解析结果[/bold]")
+    if isinstance(result, Resume):
+        console.print(Panel(
+            json.dumps(result.model_dump(mode="json"), ensure_ascii=False, indent=2),
+            title="Resume 对象（已校验，转回 dict）",
+            border_style="green",
+            expand=False,
+        ))
+    else:
+        console.print(Panel(
+            json.dumps(result, ensure_ascii=False, indent=2) if isinstance(result, dict) else str(result),
+            title="dict（未校验）",
+            border_style="yellow",
+            expand=False,
+        ))
+
+    if meta is not None:
+        console.print(
+            f"[dim]finish_reason={meta.finish_reason} · trace_id={meta.trace_id} · "
+            f"耗时 {meta.elapsed_ms:.0f}ms · 存盘 {meta.saved_path or '(未存)'}[/dim]"
+        )
+
+
 def run_mode(client: LLMClient, mode: str, text: str) -> dict:
     """跑一种模式，返回 {ok, result, error, raw_preview, tokens}。"""
     messages = build_extract_messages(text)
@@ -110,6 +168,22 @@ def run_mode(client: LLMClient, mode: str, text: str) -> dict:
     except LLMCallError as exc:
         return {"ok": False, "error": f"调用失败: {exc}", "raw_preview": "", "tokens": 0}
 
+    meta = client.meta
+    record = {
+        "mode": mode,
+        "input_text": text,
+        "raw_output": raw,
+        "meta": {
+            "finish_reason": meta.finish_reason,
+            "prompt_tokens": meta.prompt_tokens,
+            "completion_tokens": meta.completion_tokens,
+            "reasoning_tokens": meta.reasoning_tokens,
+            "elapsed_ms": round(meta.elapsed_ms, 1),
+            "trace_id": meta.trace_id,
+            "truncated": meta.truncated,
+        },
+    }
+
     try:
         if mode == "naive":
             result: object = parse_naive(raw)
@@ -120,9 +194,26 @@ def run_mode(client: LLMClient, mode: str, text: str) -> dict:
         else:
             result = parse_schema(raw)
             note = "（Pydantic 字段级校验）"
-        return {"ok": True, "result": result, "note": note, "raw_preview": raw[:120], "tokens": client.meta.completion_tokens}
+
+        record["ok"] = True
+        record["parsed"] = result.model_dump(mode="json") if isinstance(result, Resume) else result
+        record["saved_path"] = _save_extraction(record)
+        return {
+            "ok": True, "result": result, "note": note,
+            "raw": raw, "raw_preview": raw[:120],
+            "tokens": meta.completion_tokens, "meta": meta,
+            "saved_path": record["saved_path"],
+        }
     except Exception as exc:  # noqa: BLE001
-        return {"ok": False, "error": f"{type(exc).__name__}: {str(exc)[:180]}", "raw_preview": raw[:160], "tokens": client.meta.completion_tokens}
+        record["ok"] = False
+        record["error"] = f"{type(exc).__name__}: {exc}"
+        record["saved_path"] = _save_extraction(record)
+        return {
+            "ok": False, "error": f"{type(exc).__name__}: {str(exc)[:180]}",
+            "raw": raw, "raw_preview": raw[:160],
+            "tokens": meta.completion_tokens, "meta": meta,
+            "saved_path": record["saved_path"],
+        }
 
 
 def main() -> None:
@@ -132,6 +223,7 @@ def main() -> None:
     p.add_argument("--rounds", type=int, default=1, help="重复次数（测稳定性，如 10）")
     p.add_argument("--adversarial", action="store_true", help="喂非简历文本，看校验拦截")
     p.add_argument("--max-tokens", type=int, default=3000)
+    p.add_argument("--show-raw", action="store_true", help="打印模型原始响应与解析过程（默认只在失败时打印）")
     args = p.parse_args()
 
     text = ADVERSARIAL_TEXT if args.adversarial else (args.text or SAMPLE_RESUME)
@@ -158,8 +250,18 @@ def main() -> None:
         for i in range(args.rounds):
             last = run_mode(client, mode, text)
             ok_n += bool(last["ok"])
-            if not last["ok"] and args.rounds == 1:
-                console.print(f"[dim]── {mode} 的原始输出前 160 字 ──\n{last['raw_preview']}[/dim]\n")
+            # --show-raw 时每次都展示；否则仅单轮失败时展示原始输出辅助排错
+            if args.show_raw or (not last["ok"] and args.rounds == 1):
+                console.print()
+                if last["ok"]:
+                    show_raw_and_parsed(mode, last["raw"], last["result"], last.get("meta"))
+                else:
+                    console.rule(f"[bold]{mode}[/bold] 解析失败")
+                    console.print(Panel(last["raw"], title="原始输出", border_style="red", expand=False))
+                    console.print(f"[red]{last['error']}[/red]")
+                    if last.get("saved_path"):
+                        console.print(f"[dim]已存盘：{last['saved_path']}[/dim]")
+                console.print()
         rate = ok_n / args.rounds
         verdict = f"{ok_n}/{args.rounds}"
         if last["ok"]:
