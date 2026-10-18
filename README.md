@@ -3,7 +3,7 @@
 > 从传统 Web/前端 转向 **AI 应用开发工程师** 的完整学习工程。
 > 主路线：`LLM API → Prompt → RAG → Agent → LangGraph → MCP → AI 工程化 → 项目 → 面试`
 
-**当前进度**：Day 3 ✅ / Day 4 ✅ / Day 5 ✅（按单元推进，不跟日历）｜下一步：Unit 06 Streaming
+**当前进度**：Unit 3 ✅ / Unit 4 ✅ / Unit 5 ✅（按单元推进，不跟日历）｜下一步：Unit 06 Streaming
 **每日投入**：1–2 小时（在职节奏）
 **主力模型**：DeepSeek `deepseek-flash`（OpenAI 兼容协议）
 
@@ -14,39 +14,43 @@
 | 文档 | 说明 |
 | --- | --- |
 | [docs/学习单元计划.md](docs/学习单元计划.md) | **主计划**：Unit 03–90 学习单元、资料链接、完成标准（按单元推进，不跟日历） |
-| [docs/interview-questions.md](docs/interview-questions.md) | 面试题库（Day 87–89 模拟面试用） |
+| [docs/interview-questions.md](docs/interview-questions.md) | 面试题库（Unit 87–89 模拟面试用） |
 
 ---
 
 ## 📁 目录结构
 
 ```
-~/ai-journey/                   # WSL 家目录（主副本，从这里写代码）
-├── docs/                       # 计划、笔记、面试题
-├── day03-cli-chat/             # ✅ Day 3   CLI Chat（已跑通、已上传 GitHub）
-├── day04-prompt/               # ⬜ Day 4   Prompt 实验台
-├── day05-structured/           # ⬜ Day 5   JSON 结构化输出
-├── day06-streaming/            # ⬜ Day 6   流式 / SSE
-├── day07-web-chat/             # ⬜ Day 7   Next.js + FastAPI 打通
-├── project1-ai-chat/           # ⬜ Day 8–14  AI Chat 完整版
-├── project2-knowledge-base/    # ⬜ Day 15–30 企业知识库（RAG）
-├── project3-research-agent/    # ⬜ Day 31–45 Research Agent
-├── project4-mcp-sql-agent/     # ⬜ Day 46–60 MCP 数据库 Agent
+~/ai-journey/                  # WSL 家目录（= GitHub 仓库根目录）
+├── 00-setup/                  # 环境脚本、密钥模板
+├── docs/                      # 计划、笔记、面试题
+├── unit01-fastapi/            # ✅ Unit 1   FastAPI 基础（路由/校验/async/流式）
+├── unit02-llm-basics/         # ✅ Unit 2   LLM 基础（token/temperature/context）
+├── unit03-cli-chat/           # ✅ Unit 3   CLI Chat
+├── unit04-prompt/             # ✅ Unit 4   Prompt 实验台
+├── unit05-structured/         # ✅ Unit 5   JSON 结构化输出
+├── unit06-streaming/          # ⬜ Unit 6   流式 / SSE
+├── unit07-web-chat/           # ⬜ Unit 7   Next.js + FastAPI 打通
+├── project1-ai-chat/          # ⬜ Unit 8–14   AI Chat 完整版
+├── project2-knowledge-base/   # ⬜ Unit 15–30  企业知识库（RAG）
+├── project3-research-agent/   # ⬜ Unit 31–45  Research Agent
+├── project4-mcp-sql-agent/    # ⬜ Unit 46–60  MCP 数据库 Agent
 └── README.md
 ```
+
 
 ## 🔗 GitHub
 
 | 仓库 | 内容 | 状态 |
 | --- | --- | --- |
-| [Conroy-X/deepseek-stream-demo](https://github.com/Conroy-X/deepseek-stream-demo) | 本工程全部代码：Day 2 流式 Demo（根目录 `main.py`）+ Day 3 CLI Chat（`day03-cli-chat/`）+ 学习文档（`docs/`） | ✅ 已同步 |
+| [Conroy-X/deepseek-stream-demo](https://github.com/Conroy-X/deepseek-stream-demo) | 本工程全部代码：`unit01-fastapi/` ~ `unit05-structured/` 五个学习单元 + 根目录流式 Demo（`main.py`）+ 学习文档（`docs/`） | ✅ 已同步 |
 
 > **`~/ai-journey` 就是本仓库的工作副本**（git 仓库根目录即此处），远端是 `git@github.com:Conroy-X/deepseek-stream-demo.git`。
 > 推送走 **SSH**（`ssh -T git@github.com` 已验证为 `Conroy-X`）；`~/projects/deepseek-stream-demo` 是早期克隆，已与远端同步。
 
 ---
 
-## 🧩 Day 2 · DeepSeek 流式问答 Demo（根目录 `main.py`）
+## 🧩 Unit 2 · DeepSeek 流式问答 Demo（根目录 `main.py`）
 
 > 单文件（约 80 行）：**FastAPI 接住参数 → 请求 DeepSeek → 流式吐回客户端**。没有多轮对话、没有数据库、没有前端。
 
@@ -71,7 +75,7 @@ curl -N "http://localhost:8000/ask?q=用一句话介绍 FastAPI"
 | `run.sh` | 等价于 `uv sync && uv run fastapi dev` |
 
 核心就三段：`@app.get("/ask")` 用 `Query` 接住问题 → `httpx.AsyncClient().stream()` 以 `stream=True` 请求 `/chat/completions` → 把每个 `data:` 分片里的 `delta.content` 立刻 `yield` 给 `StreamingResponse`。
-（Day 6 会正式讲这套流式机制，届时把这里的实现对照一遍。）
+（Unit 6 会正式讲这套流式机制，届时把这里的实现对照一遍。）
 
 ---
 
@@ -84,7 +88,7 @@ curl -N "http://localhost:8000/ask?q=用一句话介绍 FastAPI"
 curl -LsSf https://astral.sh/uv/install.sh | sh && source ~/.bashrc
 
 # 2. 进入今天的学习目录
-cd ~/ai-journey/day03-cli-chat
+cd ~/ai-journey/unit03-cli-chat
 
 # 3. 建环境装依赖
 uv venv --python 3.12 && source .venv/bin/activate
@@ -107,12 +111,12 @@ python chat.py
 
 | 阶段 | 天数 | 主题 | 状态 | 产出 |
 | --- | --- | --- | --- | --- |
-| 一 | Day 3–14 | LLM API + Prompt + 全栈 Chat | 🟡 进行中 | AI Chat 完整版 |
-| 二 | Day 15–30 | Embedding / pgvector / RAG | ⬜ | 企业知识库 AI |
-| 三 | Day 31–45 | Function Calling / LangGraph | ⬜ | Research Agent |
-| 四 | Day 46–60 | MCP | ⬜ | MCP 数据库 Agent |
-| 五 | Day 61–75 | AI 工程化 + LLM 原理 | ⬜ | 容器化 + 评测 |
-| 六 | Day 76–90 | 项目打磨 + 简历 + 面试 | ⬜ | 3 个仓库 + 简历 |
+| 一 | Unit 3–14 | LLM API + Prompt + 全栈 Chat | 🟡 进行中 | AI Chat 完整版 |
+| 二 | Unit 15–30 | Embedding / pgvector / RAG | ⬜ | 企业知识库 AI |
+| 三 | Unit 31–45 | Function Calling / LangGraph | ⬜ | Research Agent |
+| 四 | Unit 46–60 | MCP | ⬜ | MCP 数据库 Agent |
+| 五 | Unit 61–75 | AI 工程化 + LLM 原理 | ⬜ | 容器化 + 评测 |
+| 六 | Unit 76–90 | 项目打磨 + 简历 + 面试 | ⬜ | 3 个仓库 + 简历 |
 
 ---
 

@@ -1,13 +1,13 @@
-# AI 应用开发面试题库（Day 87–89 模拟面试用）
+# AI 应用开发面试题库（Unit 87–89 模拟面试用）
 
 > 用法：**先自己开口答，再对照要点**。每题的「追问」是面试官最常用的第二刀，答不上来等于第一题没过。
-> 建议：Day 87/88/89 各挑 10 题连答并录音，回放找卡壳点。
+> 建议：Unit 87/88/89 各挑 10 题连答并录音，回放找卡壳点。
 >
 > 标记：⭐ = 几乎必问 ｜ 🔁 = 高频追问
 
 ---
 
-## 一、LLM 基础（Day 87）
+## 一、LLM 基础（Unit 87）
 
 ### 1. ⭐ 解释 Token / Context Window / Temperature / Top-p
 **要点**：Token 是模型的最小处理单位（≈0.75 个英文词 / 1~2 个汉字），计费与上下文长度都按 token 算；Context Window 是一次请求能容纳的「输入+输出」总 token 上限，超出要截断或摘要；Temperature 调节 logits 分布的平滑程度，越低越确定；Top-p（核采样）只从累积概率达 p 的最小词集合里采样。
@@ -38,7 +38,7 @@
 
 ---
 
-## 二、RAG（Day 87）
+## 二、RAG（Unit 87）
 
 ### 8. ⭐ 完整讲一遍你的 RAG 链路，以及每一环可能出什么错
 **要点**：解析 → 切块 → Embedding → 入库 → Query 改写 → 检索（向量/关键词/混合）→ 重排 → 拼 Context → 生成 → 引用。
@@ -63,7 +63,7 @@
 
 ---
 
-## 三、Agent / LangGraph（Day 88）
+## 三、Agent / LangGraph（Unit 88）
 
 ### 14. ⭐ 完整描述一次 Function Calling 的消息流转
 **要点**：① 带 `tools` 定义发请求；② 模型返回 `assistant` 消息，`content` 可能为空，`tool_calls` 里是函数名 + JSON 参数；③ 应用执行函数；④ 把结果作为 `role: "tool"` 消息（带 `tool_call_id`）追加进 messages；⑤ 再次请求模型，它基于工具结果生成最终回答。
@@ -84,7 +84,7 @@
 
 ---
 
-## 四、MCP（Day 88）
+## 四、MCP（Unit 88）
 
 ### 19. MCP 解决什么问题？Host / Client / Server 各是什么？
 **要点**：MCP（Model Context Protocol）把「模型能访问哪些工具和数据」标准化，避免每个应用各写一套集成（N×M 问题变成 N+M）。Host 是最终用户使用的 AI 应用（Claude Desktop、IDE、你的 Agent）；Client 是 Host 内部按 1:1 连接某个 Server 的协议部件；Server 是暴露能力的服务端。传输方式主要有 stdio（本地子进程）和 HTTP（远程）。
@@ -97,7 +97,7 @@
 
 ---
 
-## 五、AI 工程化（Day 89）
+## 五、AI 工程化（Unit 89）
 
 ### 22. ⭐ 怎么降低 LLM 应用的成本？
 **要点**：① 缓存（精确缓存 + 语义缓存，Redis）；② 模型分级——简单任务用小模型/便宜模型，难任务才升级；③ 控制上下文（截断、摘要、只传相关检索片段）；④ 输出限制 `max_tokens`、要求简洁；⑤ 批处理（离线任务用 Batch API）；⑥ 提示词缓存（服务端的 prefix caching 能大幅降价）；⑦ 监控单位成本（每次请求的 token 与费用）。

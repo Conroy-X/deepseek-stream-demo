@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Day 3 provisioning (WSL Debian). Run via: scp this file, then bash it.
+# Unit 3 provisioning (WSL Debian). Run via: scp this file, then bash it.
 # Password is passed in via the SUDO_PW environment variable.
 set -uo pipefail
 
@@ -50,7 +50,7 @@ uv python install 3.12 2>&1 | tail -3
 uv python list 2>&1 | grep -E '3\.12' | head -3
 
 echo
-echo "=== 5. toolchain inventory (for later days) ==="
+echo "=== 5. toolchain inventory (for later units) ==="
 for c in git curl jq node npm docker psql redis-cli make gcc ffmpeg; do
   if command -v "$c" >/dev/null 2>&1; then printf '  %-10s %s\n' "$c" "$(command -v "$c")"; else printf '  %-10s MISSING\n' "$c"; fi
 done

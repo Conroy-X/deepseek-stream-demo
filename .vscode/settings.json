@@ -1,6 +1,6 @@
 {
-    // 工作区级设置：让 VS Code 自动认出 day03 的虚拟环境
-    "python.defaultInterpreterPath": "${workspaceFolder}/day03-cli-chat/.venv/bin/python",
+    // 工作区级设置：让 VS Code 自动认出 unit03 的虚拟环境
+    "python.defaultInterpreterPath": "${workspaceFolder}/unit03-cli-chat/.venv/bin/python",
     "python.terminal.activateEnvironment": true,
     "python.analysis.autoImportCompletions": true,
     "python.analysis.typeCheckingMode": "basic",

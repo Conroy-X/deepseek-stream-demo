@@ -1,0 +1,3 @@
+openai>=1.60
+python-dotenv>=1.0
+tiktoken>=0.7      # 可选：精确 token 计数；装不上会自动退回估算

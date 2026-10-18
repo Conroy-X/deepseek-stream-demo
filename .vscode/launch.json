@@ -1,17 +1,56 @@
 {
     // VS Code 调试配置（WSL Remote 下使用）
     // 打开方式：VS Code 连接到 WSL 后打开 ~/ai-journey 目录，按 F5 选下方配置。
-    // 所有配置都已绑定 day03-cli-chat 的虚拟环境与 .env，不需要手动 source activate。
+    // 每个配置都绑定对应 unit 目录的虚拟环境与 .env，不需要手动 source activate。
+    // 排序：Unit 1 → Unit 5；标「不花钱」的不会调用 API。
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "① 01_hello（第一次真实调用）",
+            "name": "① Unit 1 · FastAPI 路由自检（不花钱）",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/day03-cli-chat/01_hello.py",
-            "cwd": "${workspaceFolder}/day03-cli-chat",
-            "python": "${workspaceFolder}/day03-cli-chat/.venv/bin/python",
-            "envFile": "${workspaceFolder}/day03-cli-chat/.env",
+            "program": "${workspaceFolder}/unit01-fastapi/main.py",
+            "cwd": "${workspaceFolder}/unit01-fastapi",
+            "python": "${workspaceFolder}/unit01-fastapi/.venv/bin/python",
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "② Unit 2 · token 估算（不花钱）",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/unit02-llm-basics/demo.py",
+            "args": [
+                "--offline"
+            ],
+            "cwd": "${workspaceFolder}/unit02-llm-basics",
+            "python": "${workspaceFolder}/unit02-llm-basics/.venv/bin/python",
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "③ Unit 2 · 四个概念实验（花钱，约 ¥0.01）",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/unit02-llm-basics/demo.py",
+            "cwd": "${workspaceFolder}/unit02-llm-basics",
+            "python": "${workspaceFolder}/unit02-llm-basics/.venv/bin/python",
+            "envFile": "${workspaceFolder}/unit02-llm-basics/.env",
+            "env": {
+                "PYTHONUNBUFFERED": "1",
+                "LANG": "C.UTF-8"
+            },
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "④ Unit 3 · 01_hello（第一次真实调用）",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/unit03-cli-chat/01_hello.py",
+            "cwd": "${workspaceFolder}/unit03-cli-chat",
+            "python": "${workspaceFolder}/unit03-cli-chat/.venv/bin/python",
+            "envFile": "${workspaceFolder}/unit03-cli-chat/.env",
             "env": {
                 "PYTHONUNBUFFERED": "1",
                 "LANG": "C.UTF-8"
@@ -21,13 +60,13 @@
             "stopOnEntry": false
         },
         {
-            "name": "② chat.py（多轮对话 CLI）",
+            "name": "⑤ Unit 3 · chat.py（多轮对话 CLI）",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/day03-cli-chat/chat.py",
-            "cwd": "${workspaceFolder}/day03-cli-chat",
-            "python": "${workspaceFolder}/day03-cli-chat/.venv/bin/python",
-            "envFile": "${workspaceFolder}/day03-cli-chat/.env",
+            "program": "${workspaceFolder}/unit03-cli-chat/chat.py",
+            "cwd": "${workspaceFolder}/unit03-cli-chat",
+            "python": "${workspaceFolder}/unit03-cli-chat/.venv/bin/python",
+            "envFile": "${workspaceFolder}/unit03-cli-chat/.env",
             "env": {
                 "PYTHONUNBUFFERED": "1",
                 "LANG": "C.UTF-8"
@@ -36,14 +75,14 @@
             "justMyCode": true
         },
         {
-            "name": "③ debug_response（查看原始响应）",
+            "name": "⑥ Unit 3 · debug_response（查看原始响应）",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/day03-cli-chat/debug_response.py",
+            "program": "${workspaceFolder}/unit03-cli-chat/debug_response.py",
             "args": [],
-            "cwd": "${workspaceFolder}/day03-cli-chat",
-            "python": "${workspaceFolder}/day03-cli-chat/.venv/bin/python",
-            "envFile": "${workspaceFolder}/day03-cli-chat/.env",
+            "cwd": "${workspaceFolder}/unit03-cli-chat",
+            "python": "${workspaceFolder}/unit03-cli-chat/.venv/bin/python",
+            "envFile": "${workspaceFolder}/unit03-cli-chat/.env",
             "env": {
                 "PYTHONUNBUFFERED": "1",
                 "LANG": "C.UTF-8"
@@ -52,14 +91,16 @@
             "justMyCode": true
         },
         {
-            "name": "④ debug_response --stream（看 chunk）",
+            "name": "⑦ Unit 3 · debug_response --stream（看 chunk）",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/day03-cli-chat/debug_response.py",
-            "args": ["--stream"],
-            "cwd": "${workspaceFolder}/day03-cli-chat",
-            "python": "${workspaceFolder}/day03-cli-chat/.venv/bin/python",
-            "envFile": "${workspaceFolder}/day03-cli-chat/.env",
+            "program": "${workspaceFolder}/unit03-cli-chat/debug_response.py",
+            "args": [
+                "--stream"
+            ],
+            "cwd": "${workspaceFolder}/unit03-cli-chat",
+            "python": "${workspaceFolder}/unit03-cli-chat/.venv/bin/python",
+            "envFile": "${workspaceFolder}/unit03-cli-chat/.env",
             "env": {
                 "PYTHONUNBUFFERED": "1",
                 "LANG": "C.UTF-8"
@@ -68,148 +109,195 @@
             "justMyCode": true
         },
         {
-            "name": "⑤ 当前文件（Current File，不读 .env）",
+            "name": "⑧ Unit 3 · 当前文件（Current File，不读 .env）",
             "type": "debugpy",
             "request": "launch",
             "program": "${file}",
             "cwd": "${fileDirname}",
-            "python": "${workspaceFolder}/day03-cli-chat/.venv/bin/python",
+            "python": "${workspaceFolder}/unit03-cli-chat/.venv/bin/python",
             "console": "integratedTerminal",
             "justMyCode": true
         },
         {
-            "name": "⑥ day04 · 变体对比 variants",
+            "name": "⑨ Unit 4 · 变体对比 variants",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/day04-prompt/experiments.py",
-            "args": ["variants", "--cases", "2"],
-            "cwd": "${workspaceFolder}/day04-prompt",
-            "python": "${workspaceFolder}/day04-prompt/.venv/bin/python",
-            "envFile": "${workspaceFolder}/day04-prompt/.env",
-            "env": { "PYTHONUNBUFFERED": "1", "LANG": "C.UTF-8" },
+            "program": "${workspaceFolder}/unit04-prompt/experiments.py",
+            "args": [
+                "variants",
+                "--cases",
+                "2"
+            ],
+            "cwd": "${workspaceFolder}/unit04-prompt",
+            "python": "${workspaceFolder}/unit04-prompt/.venv/bin/python",
+            "envFile": "${workspaceFolder}/unit04-prompt/.env",
+            "env": {
+                "PYTHONUNBUFFERED": "1",
+                "LANG": "C.UTF-8"
+            },
             "console": "integratedTerminal",
             "justMyCode": true
         },
         {
-            "name": "⑦ day04 · few-shot 对比",
+            "name": "⑩ Unit 4 · few-shot 对比",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/day04-prompt/experiments.py",
-            "args": ["fewshot", "--cases", "2"],
-            "cwd": "${workspaceFolder}/day04-prompt",
-            "python": "${workspaceFolder}/day04-prompt/.venv/bin/python",
-            "envFile": "${workspaceFolder}/day04-prompt/.env",
-            "env": { "PYTHONUNBUFFERED": "1", "LANG": "C.UTF-8" },
+            "program": "${workspaceFolder}/unit04-prompt/experiments.py",
+            "args": [
+                "fewshot",
+                "--cases",
+                "2"
+            ],
+            "cwd": "${workspaceFolder}/unit04-prompt",
+            "python": "${workspaceFolder}/unit04-prompt/.venv/bin/python",
+            "envFile": "${workspaceFolder}/unit04-prompt/.env",
+            "env": {
+                "PYTHONUNBUFFERED": "1",
+                "LANG": "C.UTF-8"
+            },
             "console": "integratedTerminal",
             "justMyCode": true
         },
         {
-            "name": "⑧ day04 · System vs User",
+            "name": "⑪ Unit 4 · System vs User",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/day04-prompt/experiments.py",
-            "args": ["system", "--cases", "2"],
-            "cwd": "${workspaceFolder}/day04-prompt",
-            "python": "${workspaceFolder}/day04-prompt/.venv/bin/python",
-            "envFile": "${workspaceFolder}/day04-prompt/.env",
-            "env": { "PYTHONUNBUFFERED": "1", "LANG": "C.UTF-8" },
+            "program": "${workspaceFolder}/unit04-prompt/experiments.py",
+            "args": [
+                "system",
+                "--cases",
+                "2"
+            ],
+            "cwd": "${workspaceFolder}/unit04-prompt",
+            "python": "${workspaceFolder}/unit04-prompt/.venv/bin/python",
+            "envFile": "${workspaceFolder}/unit04-prompt/.env",
+            "env": {
+                "PYTHONUNBUFFERED": "1",
+                "LANG": "C.UTF-8"
+            },
             "console": "integratedTerminal",
             "justMyCode": true
         },
         {
-            "name": "⑨ day04 · 只看 Prompt（dry-run，不花钱）",
+            "name": "⑫ Unit 4 · 只看 Prompt（dry-run，不花钱）",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/day04-prompt/experiments.py",
-            "args": ["variants", "--dry-run"],
-            "cwd": "${workspaceFolder}/day04-prompt",
-            "python": "${workspaceFolder}/day04-prompt/.venv/bin/python",
+            "program": "${workspaceFolder}/unit04-prompt/experiments.py",
+            "args": [
+                "variants",
+                "--dry-run"
+            ],
+            "cwd": "${workspaceFolder}/unit04-prompt",
+            "python": "${workspaceFolder}/unit04-prompt/.venv/bin/python",
             "console": "integratedTerminal",
             "justMyCode": true
         },
         {
-            "name": "⑩ day04 · 离线自检（不花钱）",
+            "name": "⑬ Unit 4 · 离线自检（不花钱）",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/day04-prompt/selfcheck.py",
-            "cwd": "${workspaceFolder}/day04-prompt",
-            "python": "${workspaceFolder}/day04-prompt/.venv/bin/python",
+            "program": "${workspaceFolder}/unit04-prompt/selfcheck.py",
+            "cwd": "${workspaceFolder}/unit04-prompt",
+            "python": "${workspaceFolder}/unit04-prompt/.venv/bin/python",
             "console": "integratedTerminal",
             "justMyCode": true
         },
         {
-            "name": "⑪ day04 · 代码审查助手（选做）",
+            "name": "⑭ Unit 4 · 代码审查助手（选做）",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/day04-prompt/code_reviewer.py",
+            "program": "${workspaceFolder}/unit04-prompt/code_reviewer.py",
             "args": [],
-            "cwd": "${workspaceFolder}/day04-prompt",
-            "python": "${workspaceFolder}/day04-prompt/.venv/bin/python",
-            "envFile": "${workspaceFolder}/day04-prompt/.env",
-            "env": { "PYTHONUNBUFFERED": "1", "LANG": "C.UTF-8" },
+            "cwd": "${workspaceFolder}/unit04-prompt",
+            "python": "${workspaceFolder}/unit04-prompt/.venv/bin/python",
+            "envFile": "${workspaceFolder}/unit04-prompt/.env",
+            "env": {
+                "PYTHONUNBUFFERED": "1",
+                "LANG": "C.UTF-8"
+            },
             "console": "integratedTerminal",
             "justMyCode": true
-        }
-,
+        },
         {
-            "name": "⑫ day05 · 三模式抽取对比",
+            "name": "⑮ Unit 5 · 三模式抽取对比",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/day05-structured/extract.py",
+            "program": "${workspaceFolder}/unit05-structured/extract.py",
             "args": [],
-            "cwd": "${workspaceFolder}/day05-structured",
-            "python": "${workspaceFolder}/day05-structured/.venv/bin/python",
-            "envFile": "${workspaceFolder}/day05-structured/.env",
-            "env": { "PYTHONUNBUFFERED": "1", "LANG": "C.UTF-8" },
+            "cwd": "${workspaceFolder}/unit05-structured",
+            "python": "${workspaceFolder}/unit05-structured/.venv/bin/python",
+            "envFile": "${workspaceFolder}/unit05-structured/.env",
+            "env": {
+                "PYTHONUNBUFFERED": "1",
+                "LANG": "C.UTF-8"
+            },
             "console": "integratedTerminal",
             "justMyCode": true
         },
         {
-            "name": "⑬ day05 · 10 轮通过率（完成标准）",
+            "name": "⑯ Unit 5 · 10 轮通过率（完成标准）",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/day05-structured/extract.py",
-            "args": ["--mode", "schema", "--rounds", "10"],
-            "cwd": "${workspaceFolder}/day05-structured",
-            "python": "${workspaceFolder}/day05-structured/.venv/bin/python",
-            "envFile": "${workspaceFolder}/day05-structured/.env",
-            "env": { "PYTHONUNBUFFERED": "1", "LANG": "C.UTF-8" },
+            "program": "${workspaceFolder}/unit05-structured/extract.py",
+            "args": [
+                "--mode",
+                "schema",
+                "--rounds",
+                "10"
+            ],
+            "cwd": "${workspaceFolder}/unit05-structured",
+            "python": "${workspaceFolder}/unit05-structured/.venv/bin/python",
+            "envFile": "${workspaceFolder}/unit05-structured/.env",
+            "env": {
+                "PYTHONUNBUFFERED": "1",
+                "LANG": "C.UTF-8"
+            },
             "console": "integratedTerminal",
             "justMyCode": true
         },
         {
-            "name": "⑭ day05 · 对抗实验（非简历输入）",
+            "name": "⑰ Unit 5 · 对抗实验（非简历输入）",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/day05-structured/extract.py",
-            "args": ["--adversarial"],
-            "cwd": "${workspaceFolder}/day05-structured",
-            "python": "${workspaceFolder}/day05-structured/.venv/bin/python",
-            "envFile": "${workspaceFolder}/day05-structured/.env",
-            "env": { "PYTHONUNBUFFERED": "1", "LANG": "C.UTF-8" },
+            "program": "${workspaceFolder}/unit05-structured/extract.py",
+            "args": [
+                "--adversarial"
+            ],
+            "cwd": "${workspaceFolder}/unit05-structured",
+            "python": "${workspaceFolder}/unit05-structured/.venv/bin/python",
+            "envFile": "${workspaceFolder}/unit05-structured/.env",
+            "env": {
+                "PYTHONUNBUFFERED": "1",
+                "LANG": "C.UTF-8"
+            },
             "console": "integratedTerminal",
             "justMyCode": true
         },
         {
-            "name": "⑮ day05 · 重试闭环（选做）",
+            "name": "⑱ Unit 5 · 重试闭环（选做）",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/day05-structured/retry_extract.py",
-            "args": ["--dirty"],
-            "cwd": "${workspaceFolder}/day05-structured",
-            "python": "${workspaceFolder}/day05-structured/.venv/bin/python",
-            "envFile": "${workspaceFolder}/day05-structured/.env",
-            "env": { "PYTHONUNBUFFERED": "1", "LANG": "C.UTF-8" },
+            "program": "${workspaceFolder}/unit05-structured/retry_extract.py",
+            "args": [
+                "--dirty"
+            ],
+            "cwd": "${workspaceFolder}/unit05-structured",
+            "python": "${workspaceFolder}/unit05-structured/.venv/bin/python",
+            "envFile": "${workspaceFolder}/unit05-structured/.env",
+            "env": {
+                "PYTHONUNBUFFERED": "1",
+                "LANG": "C.UTF-8"
+            },
             "console": "integratedTerminal",
             "justMyCode": true
         },
         {
-            "name": "⑯ day05 · 模型自检（不花钱）",
+            "name": "⑲ Unit 5 · 模型自检（不花钱）",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/day05-structured/models.py",
-            "cwd": "${workspaceFolder}/day05-structured",
-            "python": "${workspaceFolder}/day05-structured/.venv/bin/python",
+            "program": "${workspaceFolder}/unit05-structured/models.py",
+            "cwd": "${workspaceFolder}/unit05-structured",
+            "python": "${workspaceFolder}/unit05-structured/.venv/bin/python",
             "console": "integratedTerminal",
             "justMyCode": true
         }

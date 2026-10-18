@@ -1,4 +1,0 @@
-# Day 4 依赖（与 Day 3 基本一致；pydantic 留到 Day 5 结构化输出再装）
-openai>=3.28
-python-dotenv>=1.2
-rich>=15.0
