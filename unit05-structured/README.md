@@ -80,7 +80,7 @@ DeepSeek json_mode 的坑（官方文档明说的）：**必须在 Prompt 里显
 | --- | --- |
 | `models.py` | `Resume` Pydantic 模型（8 字段 + 枚举 + 范围校验 + 别名归一）+ 抽取用的 Prompt 三件套 |
 | `extract.py` | 三种模式对比器 + 10 轮通过率统计 + 对抗输入 |
-| `retry_extract.py` | 选做：ValidationError 喂回模型的自愈闭环（手写 Instructor 核心） |
+| `retry_extract.py` | 选做：ValidationError 喂回模型的重试闭环（手写 Instructor 核心） |
 | `notes.md` | 今日笔记（含完成标准对照） |
 
 ---
