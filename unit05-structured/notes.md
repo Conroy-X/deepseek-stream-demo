@@ -4,7 +4,74 @@
 
 ## 今天做了什么
 
--
+> 2026-10-18 全天记录（含凌晨、白天、下午三段时间线）
+
+### 凌晨 00:05–01:09 · 收尾 day04、踩坑与幕间
+
+- 收尾 `workbuddy2api-panel` 的 docker compose 构建，判断环境不合适后**主动放弃 docker 路线**，
+  改回 WSL 原生环境部署（这个决定影响了后面所有天的环境方案）。
+- 装 `dsh-workbuddy-connect` 插件失败（报「无法连接插件源」），排查网络后未解决，暂时搁置。
+- 让 AI 整理本机的 WSL 安装记录、学习计划与工作区资料，归档到本地备份盘（路径不在仓库中记录）。
+- 深夜和 AI 聊了一次「为什么要转型」。结论：**转型的核心动机是抗风险能力和长期安全感，
+  不是单纯「想学 AI」**。这个认知直接影响后面怎么取舍学习内容——
+  优先投入能变成可展示成果的部分，而不是无限刷概念。
+  （细节属私人内容，不在此展开。）
+- 01:09 关机。
+
+### 13:14–14:39 · 白天 · 环境清理与小需求
+
+- 删除两个废弃会话（`session-ca6added`、`session-7740cac8`）。
+- 问怎么下载《三角洲行动》、找放置挂机类网页游戏 —— 与主线无关，属日常需求。
+
+### 16:07–18:08 · 下午 · Unit 5 主战场（本单元核心）
+
+**1. 环境故障排查（16:07）**
+- 报错：`extract.py` 跑不起来。定位到不是代码问题，而是**没用 venv 解释器**——
+  `python3` 指向 `/usr/bin/python3`，缺 `rich` 等包。
+- 方案：给 day04/day05 共 6 个入口脚本加「venv 自愈」保护层
+  （判断 `sys.prefix != sys.base_prefix`，不在 venv 就 `os.execv` 切过去）。
+- 中途自己修掉两个 bug：①用了 `Path` 没导入；②用 `.resolve()` 判断导致软链误判。
+
+**2. 计划体系重构（16:11–16:38）**
+- 明确「**不追求 90 天完成，按既定节奏推进**」，放弃日历绑定。
+- 计划从「Day N 逐天」改为「**Unit N 学习单元**」，删掉落后追赶表，改为「单元被卡住怎么办」。
+- 全仓库 `day*` → `unit*` 重命名，约 200 处引用；补齐 unit01（FastAPI）/ unit02（LLM 基础）
+  两个此前只有概念没有代码的单元。
+
+**3. 基础设施（16:41–17:08）**
+- **Node**：用 nvm 安装 v24.22.0。GitHub raw 不通，nvm 改从 gitee 镜像拉；
+  npm 源设 npmmirror，实测装包 1 秒。
+- **Docker 29.9.1 + Compose v5.6.0**：发现 Docker Hub 域名被 **DNS 污染**
+  （解析到 108.160.162.98 等无关 IP），配 daocloud / 1ms.run 加速器后可正常拉镜像。
+- **PostgreSQL 17.11 + pgvector 0.8.0 + Redis 8.0.2**：原生安装，服务全部 active。
+- 中途踩坑：`curl | echo "$PW" | sudo -S tee` 串联导致 sudo 抢走 stdin，
+  表现为「GPG key 下载失败」，实际是脚本写法问题。
+
+**4. 隐私事故与善后（17:16–17:26）**
+- **发现 unit05 示例简历里有真实姓名、学校、雇主**，且已推送到公开仓库。
+- 处理：改为虚构数据（张三 / 某某大学 / 某科技公司 / example.com）。
+- 用 `git filter-repo` 重写全部历史 → 强推 → 但发现 **GitHub 仍保留孤儿提交**，
+  旧 SHA 的 diff 依然可访问。
+- 最终方案：**删库重建**（同名），彻底清除。代价是丢了 1 个 star。
+- 期间还发现**自己写的 SECURITY.md 反例里又用了真实信息**，二次重写才干净。
+- 新增 `00-setup/check-pii.py` 扫描工具 + `SECURITY.md` 规则文档。
+
+**5. Unit 6 顺带搭建（17:13）**
+- 建了 `unit06-streaming/`：FastAPI SSE 后端 + 浏览器实验台，
+  实测 curl 每 250ms 到一块、首块 12ms / 总 2219ms；真实模型 75 分块。
+
+**6. Unit 5 概念攻克（17:30–18:08）**
+- 追问 `json_mode` 与 `schema` 的区别。
+- 追问「硬编人名」「校验拦结构不拦内容」这些结论到底什么意思。
+- 自己发现关键问题：**当前 schema 模式有没有保证内容正确的代码？**（答案：没有）
+- 追问 `model_validate_json` 是哪来的（→ Pydantic `BaseModel` 内置方法）。
+- 提出要求：**以后代码必须打印或保存模型原始响应**，否则只看到解析结果。
+  → 实现两层日志（`logs/*-call.json` 存完整 HTTP 响应、`logs/*-extract.json` 存原始输出+解析结果），
+  新增 `--show-raw` 参数。
+- 要求检查 Unit 5 学习成果 → 三条完成标准全部达标（10/10 通过）。
+- 最后由 AI 整理修正笔记。
+
+---
 
 ## 三种模式对比（extract.py 的结果直接抄）
 
@@ -81,30 +148,40 @@ naive 那 10 次"成功"里，拿到的可能是 `name: null` 这类空值，
 
 | 报错 | 原因 | 怎么解决 |
 | ---- | ---- | -------- |
-|      |      |          |
+| `ModuleNotFoundError: No module named 'rich'` | 用了系统 `python3` 而非 venv 里的解释器 | 给入口脚本加 venv 自愈：检测 `sys.prefix != sys.base_prefix`，自动 `os.execv` 切到 `.venv/bin/python` |
+| `NameError: name 'Path' is not defined` | 自愈代码里用了 `Path` 但没导入 | 保护层内部只用 `os`/`sys`，不依赖模块级导入 |
+| 自愈不生效（误判已在 venv） | 用 `Path(sys.executable).resolve()` 判断，venv 的 python 是指向系统解释器的软链，resolve 后与系统完全相同 | 改用 `sys.prefix != sys.base_prefix` 判断，不跟随软链 |
+| GPG key 下载失败（Docker） | `curl ... \| echo "$PW" \| sudo -S tee` 串联，sudo 从 stdin 读密码时把 curl 数据抢走 | 先 `sudo -S -v` 建立凭据缓存，之后正常 sudo，不混在管道里 |
+| `npm: command not found`（装完 nvm 后） | `nvm use` 的 PATH 变更在管道子 shell 里失效 | 脚本里直接用绝对路径调用 |
+| 真实个人信息进了公开仓库 | 示例简历用了真实姓名/学校/雇主 | 改虚构数据 + `git filter-repo` 重写历史 + **删库重建**（强推清不掉孤儿提交） |
 
 ## 我自己的话解释「为什么不能直接 json.loads 模型的输出」
 
+当没有指定 schema + pydantic 的时候，LLM 响应不一定是 JSON 格式。
 
-
-当没有指定schema + pydantic 的时候 llm响应不一定是是JSON格式
-
-
+补充：即使 Prompt 强制了 JSON，模型的输出也常带 markdown 围栏（```` ```json ````）、
+前后闲聊、尾随逗号，`json.loads` 直接崩。实测这四种输入里 naive 只有「裸 JSON」能过。
 
 ## 我自己的话解释「json_mode 和 Pydantic 校验的分工」
 
 > 提示：一个管语法层，一个管语义层。
 
-- 一个保证输出的是JSON格式， 可以被正确解析
-- 另一个保证输出的JSON格式符合预期， 但是也不能保证JSON值完全正确
+- 一个保证输出的是 JSON 格式，可以被正确解析
+- 另一个保证输出的 JSON **结构**符合预期，但**也不能保证 JSON 值完全正确**
+
+修正：第二句严格说是「结构层」而非「语义层」——Pydantic 管的是类型/范围/枚举/必填，
+不管这个字段的**值是否属实**。真正的语义（内容真实性）要靠 evidence 核验。
 
 ## Token / 成本
 
-- 今日累计：调用 ___ 次，约 ¥___
+- 今日累计：Unit 5 验证跑约 20+ 次调用，约 ¥0.15（含 10 轮通过率测试 ¥0.0296、
+  对抗实验、重试闭环各数次）
 
-## 明天的第一件事
+## 明天 / 下次的第一件事
 
-- Unit 6 Streaming：FastAPI `/chat/stream` + SSE，浏览器逐字输出（把 Day 2 的 main.py 和今天的 JSON 策略接起来）
+- 回到 Unit 5 的收尾：`--adversarial` 再跑一次带 `--show-raw` 加深印象，
+  然后决定是否补「evidence 来源核验」这个扩展练习。
+- Unit 6 Streaming 材料已在 `unit06-streaming/` 备好，随时可开工。
 
 ---
 
