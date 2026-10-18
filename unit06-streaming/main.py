@@ -38,6 +38,9 @@ def _reexec_in_venv():
     _venv_py = _os.path.join(_here, ".venv", "bin", "python")
     if _os.path.exists(_venv_py):
         _os.execv(_venv_py, [_venv_py, _os.path.abspath(__file__)] + _sys.argv[1:])
+
+
+_reexec_in_venv()
 # --- venv 自愈 结束 ---
 
 from dotenv import load_dotenv
@@ -80,17 +83,27 @@ class SimpleRequest(BaseModel):
 
 
 _client: AsyncOpenAI | None = None
+_client_key: str | None = None  # 记录 client 是用哪个 key 建的
 
 
 def get_client() -> AsyncOpenAI:
-    global _client
-    if not API_KEY or API_KEY.startswith("sk-你的"):
+    """每次调用都重新读取模块级 API_KEY。
+
+    为什么要动态读？
+        `python main.py` 直接运行时，本模块的身份是 __main__。
+        如果别处 `import main` 再改 API_KEY，改的是另一个模块对象；
+        动态读取能保证模块变量被修改后立刻生效（自检就依赖这一点）。
+    """
+    global _client, _client_key
+    current_key = API_KEY  # 每次读取，不要缓存到局部之外的旧值
+    if not current_key or current_key.startswith("sk-你的"):
         raise HTTPException(
             status_code=500,
             detail="缺少 DEEPSEEK_API_KEY，请在 .env 里配置（cp .env.example .env）",
         )
-    if _client is None:
-        _client = AsyncOpenAI(api_key=API_KEY, base_url=BASE_URL, timeout=60.0)
+    if _client is None or _client_key != current_key:
+        _client = AsyncOpenAI(api_key=current_key, base_url=BASE_URL, timeout=60.0)
+        _client_key = current_key
     return _client
 
 
@@ -314,8 +327,11 @@ if __name__ == "__main__":
     # --- 无 API Key 时的报错是 SSE 事件而不是 500 ---
     saved = os.environ.get("DEEPSEEK_API_KEY")
     os.environ["DEEPSEEK_API_KEY"] = ""
-    import main as self_mod
 
+    # 关键：改「当前正在运行的这个模块」，而不是 import main 再加载一份副本。
+    # python main.py 时本模块是 __main__，import main 会得到另一个对象，
+    # 对副本的赋值不会影响 get_client() 读到的 API_KEY。
+    self_mod = sys.modules["__main__"]
     self_mod.API_KEY = ""
     try:
         with client.stream(

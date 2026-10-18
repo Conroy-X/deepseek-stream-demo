@@ -56,25 +56,48 @@ data: [DONE]
 
 ## 四、怎么跑
 
+### 首次准备（只需一次）
+
 ```bash
 cd ~/ai-journey/unit06-streaming
-uv venv --python /usr/bin/python3 && source .venv/bin/activate
+uv venv --python /usr/bin/python3
 uv pip install -r requirements.txt
+```
 
-# 先跑自检（不花钱、不调模型）
-python main.py
+> 若报 `uv: command not found`，先把 `~/.local/bin` 加进 PATH：
+> `export PATH="$HOME/.local/bin:$PATH"`（新开终端会自动生效）。
 
-# 再用 curl 看原始报文
-uv run uvicorn main:app --reload --port 8000
+### 五种启动方式（全部实测通过）
+
+| 方式 | 命令 | 说明 |
+| --- | --- | --- |
+| A 自检 | `python main.py` | **先跑这个**。16 项断言，不调模型、不花钱 |
+| B 兜底自检 | `python3 main.py` | 忘了 activate 也能跑（脚本内自动切到 .venv） |
+| C 开发模式 | `uv run uvicorn main:app --reload --port 8000` | 改代码自动重载 |
+| D 直接用 venv | `.venv/bin/uvicorn main:app --port 8000` | 最稳，不依赖 uv 在 PATH 里 |
+| E fastapi CLI | `uv run fastapi dev main.py --port 8000` | 带自动重载 + 交互式文档 |
+
+任选 C/D/E 之一启动后：
+
+```bash
+# 看原始报文（-N 是 --no-buffer，不加看不到流式效果）
 curl -N "http://127.0.0.1:8000/stream/demo?text=hello&delay=0.2"
 ```
 
-`-N` 是 `--no-buffer`，**不加就看不到流式效果**（curl 会攒着一次输出）。这是新手第一大坑。
-
-浏览器打开 http://127.0.0.1:8000/ ，有两个实验：
+浏览器打开 **http://127.0.0.1:8000/** ，有两个实验：
 
 - **实验一**：纯文本流式，不需要 Key，用来观察报文和节奏
 - **实验二**：真实模型流式，带 TTFT / 总耗时 / 分块数统计，还有「中途断开」按钮
+
+### 排错对照
+
+| 现象 | 原因 | 解决 |
+| --- | --- | --- |
+| `uv: command not found` | `~/.local/bin` 不在非交互 shell 的 PATH | 先 `export PATH="$HOME/.local/bin:$PATH"` |
+| `ModuleNotFoundError: No module named 'dotenv'` | 用系统 python3 且脚本没有 venv 自愈 | 用 `python main.py`（venv 内）或 `.venv/bin/python main.py` |
+| `please install "fastapi[standard]"` | 装的是裸 `fastapi`，没有 CLI | `uv pip install "fastapi[standard]"`（requirements 已改） |
+| curl 一次性输出、看不到流式 | 没加 `-N` | `curl -N ...` |
+| 页面空白、404 | 不是访问 `/` 而是别的路径 | 访问 `http://127.0.0.1:8000/` |
 
 ---
 

@@ -1,0 +1,16 @@
+[project]
+name = "unit06-streaming"
+version = "0.1.0"
+description = "Unit 6 学习工程：SSE 流式输出（FastAPI 后端 + 浏览器实验台）"
+requires-python = ">=3.11"
+dependencies = [
+    "uvicorn[standard]>=0.30",
+    "fastapi[standard]>=0.115",
+    "httpx>=0.27",
+    "openai>=1.60",
+    "python-dotenv>=1.0",
+]
+
+[tool.uv]
+# 这是一个应用（不是要发布的库），不要尝试把自己装成包
+package = false
