@@ -3,7 +3,7 @@
 > 从传统 Web/前端 转向 **AI 应用开发工程师** 的完整学习工程。
 > 主路线：`LLM API → Prompt → RAG → Agent → LangGraph → MCP → AI 工程化 → 项目 → 面试`
 
-**当前进度**：Day 3 ✅ 已验收（2026-10-14）｜下一步：Day 4 Prompt 工程
+**当前进度**：Day 3 ✅ / Day 4 ✅ / Day 5 ✅（按单元推进，不跟日历）｜下一步：Unit 06 Streaming
 **每日投入**：1–2 小时（在职节奏）
 **主力模型**：DeepSeek `deepseek-flash`（OpenAI 兼容协议）
 
@@ -13,7 +13,7 @@
 
 | 文档 | 说明 |
 | --- | --- |
-| [docs/90天学习计划-Day3起.md](docs/90天学习计划-Day3起.md) | **主计划**：Day 3–90 逐天任务、资料链接、完成标准 |
+| [docs/学习单元计划.md](docs/学习单元计划.md) | **主计划**：Unit 03–90 学习单元、资料链接、完成标准（按单元推进，不跟日历） |
 | [docs/interview-questions.md](docs/interview-questions.md) | 面试题库（Day 87–89 模拟面试用） |
 
 ---
