@@ -4,15 +4,9 @@
 > 预计投入：必做 60 分钟 + 选做 30 分钟。
 
 
-> **关于「直接用 python 跑」**：这些脚本里加了 venv 自愈保护 —— 忘记
-> `source .venv/bin/activate` 也不会再报 `ModuleNotFoundError: No module named 'rich'`，
-> 脚本会自动切到本目录的 `.venv/bin/python` 重新执行。
-> 触发条件是 `sys.prefix == sys.base_prefix`（即当前不在任何 venv 里）。
->
-> **排查记录（2026-10-18）**：报错根因不是代码，而是用了 `/usr/bin/python3` ——
-> 系统 Python 里没有 `rich` / `pydantic`。两种正确姿势任选其一：
-> `source .venv/bin/activate && python extract.py`，或直接 `python3 extract.py`（自愈生效）。
-> `extract.py` 本身实测三种模式全部正常，`--rounds 10 --mode schema` 为 10/10 通过。
+> **关于运行方式**：这些脚本依赖 venv 里的包。
+> 先 `source .venv/bin/activate`，或直接用 `.venv/bin/python xxx.py`。
+> 用系统 `python3` 会报 `ModuleNotFoundError`。
 
 ---
 

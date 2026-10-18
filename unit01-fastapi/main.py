@@ -15,22 +15,6 @@ import asyncio
 from collections.abc import AsyncIterator
 from typing import Annotated
 
-# --- venv 自愈：忘记 activate 也能跑（自动切换到本目录的 .venv） ---
-def _reexec_in_venv():
-    import os as _os
-    import sys as _sys
-
-    if _sys.prefix != _sys.base_prefix:
-        return  # 已经在 venv 里
-    _here = _os.path.dirname(_os.path.abspath(__file__))
-    _venv_py = _os.path.join(_here, ".venv", "bin", "python")
-    if _os.path.exists(_venv_py):
-        _os.execv(_venv_py, [_venv_py, _os.path.abspath(__file__)] + _sys.argv[1:])
-
-
-_reexec_in_venv()
-# --- venv 自愈 结束 ---
-
 from fastapi import FastAPI, File, HTTPException, Path, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field

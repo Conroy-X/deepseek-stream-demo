@@ -28,9 +28,8 @@
 **1. 环境故障排查（16:07）**
 - 报错：`extract.py` 跑不起来。定位到不是代码问题，而是**没用 venv 解释器**——
   `python3` 指向 `/usr/bin/python3`，缺 `rich` 等包。
-- 方案：给 day04/day05 共 6 个入口脚本加「venv 自愈」保护层
-  （判断 `sys.prefix != sys.base_prefix`，不在 venv 就 `os.execv` 切过去）。
-- 中途自己修掉两个 bug：①用了 `Path` 没导入；②用 `.resolve()` 判断导致软链误判。
+- 方案：曾给入口脚本加「venv 自愈」自动切换解释器，后按需**全部移除**——
+  这种做法隐式改行为、难排查，改成「显式激活 venv 或直接用 `.venv/bin/python`」更清楚。
 
 **2. 计划体系重构（16:11–16:38）**
 - 明确「**不追求 90 天完成，按既定节奏推进**」，放弃日历绑定。
@@ -148,7 +147,7 @@ naive 那 10 次"成功"里，拿到的可能是 `name: null` 这类空值，
 
 | 报错 | 原因 | 怎么解决 |
 | ---- | ---- | -------- |
-| `ModuleNotFoundError: No module named 'rich'` | 用了系统 `python3` 而非 venv 里的解释器 | 给入口脚本加 venv 自愈：检测 `sys.prefix != sys.base_prefix`，自动 `os.execv` 切到 `.venv/bin/python` |
+| `ModuleNotFoundError: No module named 'rich'` | 用了系统 `python3` 而非 venv 里的解释器 | 先 `source .venv/bin/activate`，或直接用 `.venv/bin/python xxx.py` |
 | `NameError: name 'Path' is not defined` | 自愈代码里用了 `Path` 但没导入 | 保护层内部只用 `os`/`sys`，不依赖模块级导入 |
 | 自愈不生效（误判已在 venv） | 用 `Path(sys.executable).resolve()` 判断，venv 的 python 是指向系统解释器的软链，resolve 后与系统完全相同 | 改用 `sys.prefix != sys.base_prefix` 判断，不跟随软链 |
 | GPG key 下载失败（Docker） | `curl ... \| echo "$PW" \| sudo -S tee` 串联，sudo 从 stdin 读密码时把 curl 数据抢走 | 先 `sudo -S -v` 建立凭据缓存，之后正常 sudo，不混在管道里 |

@@ -35,7 +35,7 @@ python demo.py            # 四个实验全跑（约 ¥0.01）
 python demo.py --exp 2    # 只跑 temperature
 ```
 
-> 脚本内置 venv 自愈：忘记 activate 也能跑（会自动切到本目录 `.venv/bin/python`）。
+> 脚本需要 venv 里的依赖。跑之前先 `source .venv/bin/activate`，或直接用 `.venv/bin/python`。
 
 ---
 
