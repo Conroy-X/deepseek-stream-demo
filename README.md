@@ -30,7 +30,10 @@
 ├── unit04-prompt/             # ✅ Unit 4   Prompt 实验台
 ├── unit05-structured/         # ✅ Unit 5   JSON 结构化输出
 ├── unit06-streaming/          # ✅ Unit 6   流式 / SSE（后端 SSE + 浏览器实验台）
-├── unit07-web-chat/           # ⬜ Unit 7   Next.js + FastAPI 打通
+├── unit07-web-chat/           # 🧰 Unit 7   全栈打通 + CORS
+├── unit08-chat-ui/            # 🧰 Unit 8   Markdown 渲染 + 代码高亮
+├── unit09-conversations/      # 🧰 Unit 9   多轮对话 + SQLite
+├── unit10-context/            # 🧰 Unit 10  上下文管理（三种策略）
 ├── project1-ai-chat/          # ⬜ Unit 8–14   AI Chat 完整版
 ├── project2-knowledge-base/   # ⬜ Unit 15–30  企业知识库（RAG）
 ├── project3-research-agent/   # ⬜ Unit 31–45  Research Agent

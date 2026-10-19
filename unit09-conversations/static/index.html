@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Unit 9 · 多轮对话</title>
+<style>
+  :root { --bg:#0f1115; --panel:#171a21; --sidebar:#12151c; --line:#2a2f3a;
+          --text:#e6e8ee; --dim:#8b93a5; --accent:#4d9fff; --ok:#3ddc97; --err:#ff6b6b;
+          --code-bg:#0b0d12; --kw:#ff79c6; --str:#f1fa8c; --num:#bd93f9; --cmt:#6272a4; }
+  * { box-sizing:border-box; }
+  html,body { height:100%; }
+  body { margin:0; background:var(--bg); color:var(--text);
+         font:15px/1.7 -apple-system,"Segoe UI","PingFang SC",sans-serif; display:flex; }
+
+  /* ---------- 侧边栏 ---------- */
+  aside { width:250px; flex:0 0 250px; background:var(--sidebar);
+          border-right:1px solid var(--line); display:flex; flex-direction:column; }
+  .side-head { padding:14px 12px; border-bottom:1px solid var(--line); }
+  .newbtn { width:100%; background:var(--accent); color:#04121f; border:0;
+            border-radius:8px; padding:9px; font-weight:600; cursor:pointer; }
+  .convlist { flex:1; overflow-y:auto; padding:8px; }
+  .conv { padding:9px 10px; border-radius:7px; cursor:pointer; margin-bottom:4px;
+          font-size:13.5px; color:#c3c9d6; display:flex; justify-content:space-between;
+          gap:6px; align-items:center; }
+  .conv:hover { background:#1b2130; }
+  .conv.active { background:#1e2a3d; color:#fff; }
+  .conv .title { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; }
+  .conv .del { opacity:0; color:var(--err); font-size:15px; line-height:1;
+               background:none; border:0; cursor:pointer; padding:0 2px; }
+  .conv:hover .del { opacity:1; }
+  .empty { color:var(--dim); font-size:13px; text-align:center; padding:20px 10px; }
+
+  /* ---------- 主区 ---------- */
+  main { flex:1; display:flex; flex-direction:column; min-width:0; }
+  .topbar { padding:12px 18px; border-bottom:1px solid var(--line);
+            display:flex; justify-content:space-between; align-items:center; gap:10px; }
+  .topbar .name { font-size:14px; color:#c3c9d6; overflow:hidden;
+                  text-overflow:ellipsis; white-space:nowrap; }
+  .badge { font-size:11.5px; color:var(--dim); border:1px solid var(--line);
+           border-radius:99px; padding:2px 9px; white-space:nowrap; }
+
+  .thread { flex:1; overflow-y:auto; padding:20px 18px 10px; }
+  .thread-inner { max-width:760px; margin:0 auto; }
+  .msg { margin-bottom:18px; display:flex; gap:10px; }
+  .avatar { flex:0 0 28px; height:28px; border-radius:7px; display:grid; place-items:center;
+            font-size:12px; font-weight:700; background:#20252f; color:var(--dim); }
+  .msg.user .avatar { background:var(--accent); color:#04121f; }
+  .body { flex:1; min-width:0; }
+  .content { min-width:0; }
+  .msg.user .content { background:#1b2230; border-radius:9px; padding:9px 13px; }
+  .md h1,.md h2,.md h3 { margin:1em 0 .45em; }
+  .md p { margin:.55em 0; }
+  .md ul,.md ol { margin:.55em 0; padding-left:1.5em; }
+  .md code.inline-code { background:#20252f; padding:.12em .35em; border-radius:4px;
+                         font:.9em ui-monospace,Consolas,monospace; color:#ffb454; }
+  .md blockquote { margin:.6em 0; padding:.25em .9em; border-left:3px solid var(--accent);
+                   background:#12151c; color:#c3c9d6; }
+  .md pre { margin:.7em 0; padding:11px 13px; background:var(--code-bg);
+            border:1px solid var(--line); border-radius:7px; overflow-x:auto; }
+  .md pre code { font:13px/1.55 ui-monospace,Consolas,monospace; white-space:pre; }
+  .table-wrap { overflow-x:auto; margin:.7em 0; border:1px solid var(--line); border-radius:7px; }
+  .md table { border-collapse:collapse; width:100%; font-size:14px; }
+  .md th,.md td { padding:7px 11px; border-bottom:1px solid var(--line); }
+  .md th { background:#1b2130; }
+  .cursor::after { content:"▍"; color:var(--accent); animation:blink 1s steps(2) infinite; }
+  @keyframes blink { 50%{opacity:0;} }
+  .welcome { color:var(--dim); text-align:center; padding:60px 20px; font-size:14px; }
+
+  /* ---------- 输入区 ---------- */
+  .composer { border-top:1px solid var(--line); padding:12px 18px 16px; }
+  .composer .inner { max-width:760px; margin:0 auto; display:flex; gap:9px;
+                     background:var(--panel); border:1px solid var(--line);
+                     border-radius:11px; padding:9px 11px; }
+  textarea { flex:1; background:transparent; border:0; color:var(--text); resize:none;
+             font:15px/1.6 inherit; outline:none; max-height:130px; min-height:24px; }
+  button.send { background:var(--accent); color:#04121f; border:0; border-radius:7px;
+                padding:7px 16px; font-weight:600; cursor:pointer; }
+  button.send:disabled { opacity:.4; cursor:not-allowed; }
+  button.stopbtn { background:#2a1f22; color:var(--err); border:1px solid var(--err);
+                   border-radius:7px; padding:7px 12px; cursor:pointer; display:none; }
+
+  @media (max-width:640px) {
+    aside { position:fixed; left:0; top:0; bottom:0; z-index:20;
+            transform:translateX(-100%); transition:transform .2s; }
+    aside.open { transform:none; }
+    .menu-btn { display:block; }
+  }
+  .menu-btn { display:none; background:none; border:1px solid var(--line); color:var(--text);
+              border-radius:6px; padding:4px 10px; cursor:pointer; }
+</style>
+</head>
+<body>
+<aside id="sidebar">
+  <div class="side-head">
+    <button class="newbtn" id="btnNew">＋ 新对话</button>
+  </div>
+  <div class="convlist" id="convlist">
+    <div class="empty">还没有会话</div>
+  </div>
+</aside>
+
+<main>
+  <div class="topbar">
+    <div style="display:flex;gap:10px;align-items:center;min-width:0">
+      <button class="menu-btn" id="btnMenu">☰</button>
+      <span class="name" id="convTitle">未选择会话</span>
+    </div>
+    <span class="badge" id="convMeta">—</span>
+  </div>
+
+  <div class="thread" id="thread">
+    <div class="thread-inner" id="threadInner">
+      <div class="welcome">
+        点左侧「新对话」开始<br>
+        <span style="font-size:12.5px">历史会存进 SQLite，刷新页面不丢</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="composer">
+    <div class="inner">
+      <textarea id="q" rows="1" placeholder="Enter 发送 / Shift+Enter 换行"></textarea>
+      <button class="send" id="btnSend" disabled>发送</button>
+      <button class="stopbtn" id="btnStop">停止</button>
+    </div>
+  </div>
+</main>
+
+<script type="module">
+import { renderMarkdown, escapeHtml } from "./markdown.js";
+
+const BACKEND = "http://127.0.0.1:8000";
+const $ = (id) => document.getElementById(id);
+
+let currentId = null;
+let controller = null;
+
+/* ---------------- SSE 解析 ---------------- */
+async function* parseSSE(response) {
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let idx;
+      while ((idx = buffer.indexOf("\n\n")) !== -1) {
+        const raw = buffer.slice(0, idx);
+        buffer = buffer.slice(idx + 2);
+        if (!raw.trim()) continue;
+        const payload = raw.split("\n").filter((l) => l.startsWith("data:"))
+          .map((l) => l.slice(5).trimStart()).join("\n");
+        if (payload) yield payload;
+      }
+    }
+  } finally { reader.releaseLock(); }
+}
+
+/* ---------------- 会话列表 ---------------- */
+async function loadConversations() {
+  const box = $("convlist");
+  try {
+    const r = await fetch(`${BACKEND}/conversations`);
+    const { conversations } = await r.json();
+    if (!conversations.length) {
+      box.innerHTML = '<div class="empty">还没有会话</div>';
+      return;
+    }
+    box.innerHTML = conversations.map((c) => `
+      <div class="conv ${c.id === currentId ? "active" : ""}" data-id="${c.id}">
+        <span class="title">${escapeHtml(c.title)}</span>
+        <button class="del" data-del="${c.id}" title="删除">×</button>
+      </div>`).join("");
+  } catch (e) {
+    box.innerHTML = `<div class="empty" style="color:var(--err)">加载失败：${escapeHtml(e.message)}</div>`;
+  }
+}
+
+$("convlist").addEventListener("click", async (e) => {
+  const delBtn = e.target.closest("[data-del]");
+  if (delBtn) {
+    e.stopPropagation();
+    const id = delBtn.dataset.del;
+    if (!confirm("删除这个会话？（消息会一起删掉）")) return;
+    await fetch(`${BACKEND}/conversations/${id}`, { method: "DELETE" });
+    if (currentId === id) { currentId = null; resetThread(); }
+    await loadConversations();
+    return;
+  }
+  const item = e.target.closest(".conv");
+  if (item) await openConversation(item.dataset.id);
+});
+
+/* ---------------- 打开会话 ---------------- */
+async function openConversation(id) {
+  const r = await fetch(`${BACKEND}/conversations/${id}`);
+  if (!r.ok) return;
+  const data = await r.json();
+  currentId = id;
+  $("convTitle").textContent = data.conversation.title;
+  $("convMeta").textContent = `${data.messages.length} 条消息`;
+  $("btnSend").disabled = false;
+
+  const inner = $("threadInner");
+  inner.innerHTML = "";
+  if (!data.messages.length) {
+    inner.innerHTML = '<div class="welcome">这个会话还没有消息，问点什么吧</div>';
+  } else {
+    for (const m of data.messages) addMessage(m.role, m.content);
+  }
+  scrollBottom(true);
+  $("sidebar").classList.remove("open");
+  await loadConversations();
+}
+
+function resetThread() {
+  $("convTitle").textContent = "未选择会话";
+  $("convMeta").textContent = "—";
+  $("btnSend").disabled = true;
+  $("threadInner").innerHTML = '<div class="welcome">点左侧「新对话」开始</div>';
+}
+
+/* ---------------- 渲染消息 ---------------- */
+function addMessage(role, text = "") {
+  const inner = $("threadInner");
+  const w = inner.querySelector(".welcome");
+  if (w) w.remove();
+
+  const div = document.createElement("div");
+  div.className = `msg ${role}`;
+  div.innerHTML = `
+    <div class="avatar">${role === "user" ? "你" : "AI"}</div>
+    <div class="body"><div class="content ${role === "user" ? "" : "md"}"></div></div>`;
+  const c = div.querySelector(".content");
+  if (role === "user") c.textContent = text;
+  else c.innerHTML = renderMarkdown(text);
+  inner.appendChild(div);
+  scrollBottom();
+  return c;
+}
+
+function scrollBottom(force = false) {
+  const t = $("thread");
+  if (force || t.scrollHeight - t.scrollTop - t.clientHeight < 120) {
+    t.scrollTop = t.scrollHeight;
+  }
+}
+
+/* ---------------- 新建会话 ---------------- */
+$("btnNew").onclick = async () => {
+  const r = await fetch(`${BACKEND}/conversations`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title: "新对话" }),
+  });
+  const data = await r.json();
+  currentId = data.id;
+  $("convTitle").textContent = "新对话";
+  $("convMeta").textContent = "0 条消息";
+  $("btnSend").disabled = false;
+  $("threadInner").innerHTML = '<div class="welcome">新会话已创建，问点什么吧</div>';
+  await loadConversations();
+  $("q").focus();
+  $("sidebar").classList.remove("open");
+};
+
+/* ---------------- 发送 ---------------- */
+async function send() {
+  const text = $("q").value.trim();
+  if (!text || !currentId || controller) return;
+
+  $("q").value = "";
+  $("q").style.height = "auto";
+
+  addMessage("user", text);
+  const aiEl = addMessage("assistant");
+  aiEl.classList.add("cursor");
+
+  controller = new AbortController();
+  $("btnSend").disabled = true;
+  $("btnStop").style.display = "block";
+
+  let raw = "";
+  try {
+    const resp = await fetch(`${BACKEND}/conversations/${currentId}/messages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: text, temperature: 0.7, max_tokens: 1024 }),
+      signal: controller.signal,
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
+    for await (const payload of parseSSE(resp)) {
+      if (payload === "[DONE]") break;
+      const ev = JSON.parse(payload);
+      if (ev.type === "delta") {
+        raw += ev.content;
+        aiEl.innerHTML = renderMarkdown(raw);
+        scrollBottom();
+      } else if (ev.type === "error") {
+        aiEl.innerHTML = `<span style="color:var(--err)">出错：${escapeHtml(ev.message)}</span>`;
+      }
+    }
+  } catch (e) {
+    if (e.name === "AbortError") {
+      raw += "\n\n*（已停止）*";
+      aiEl.innerHTML = renderMarkdown(raw);
+    } else {
+      aiEl.innerHTML = `<span style="color:var(--err)">请求失败：${escapeHtml(e.message)}</span>`;
+    }
+  } finally {
+    aiEl.classList.remove("cursor");
+    if (!raw) aiEl.textContent = "（无输出）";
+    controller = null;
+    $("btnSend").disabled = false;
+    $("btnStop").style.display = "none";
+    await loadConversations();
+    // 首轮后标题会变，刷新一下
+    if (currentId) {
+      const r = await fetch(`${BACKEND}/conversations/${currentId}`);
+      if (r.ok) {
+        const d = await r.json();
+        $("convTitle").textContent = d.conversation.title;
+        $("convMeta").textContent = `${d.messages.length} 条消息`;
+      }
+    }
+  }
+}
+
+$("btnSend").onclick = send;
+$("btnStop").onclick = () => controller?.abort();
+$("q").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); }
+});
+$("q").addEventListener("input", () => {
+  $("q").style.height = "auto";
+  $("q").style.height = Math.min($("q").scrollHeight, 130) + "px";
+});
+$("btnMenu").onclick = () => $("sidebar").classList.toggle("open");
+
+/* ---------------- 启动 ---------------- */
+loadConversations();
+</script>
+</body>
+</html>

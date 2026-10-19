@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Unit 7 · 全栈打通</title>
+<style>
+  :root { --bg:#0f1115; --panel:#171a21; --line:#2a2f3a; --text:#e6e8ee; --dim:#8b93a5;
+          --accent:#4d9fff; --ok:#3ddc97; --err:#ff6b6b; --warn:#ffb454; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text);
+         font:14px/1.7 -apple-system,"Segoe UI","PingFang SC",sans-serif; }
+  .wrap { max-width:860px; margin:0 auto; padding:28px 20px 60px; }
+  h1 { font-size:20px; margin:0 0 6px; }
+  .sub { color:var(--dim); font-size:13px; margin-bottom:20px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px;
+          padding:16px; margin-bottom:16px; }
+  .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  input[type=text] { flex:1; min-width:200px; background:#0d0f14; border:1px solid var(--line);
+                     color:var(--text); border-radius:7px; padding:9px 11px; font-size:14px; outline:none; }
+  input[type=text]:focus { border-color:var(--accent); }
+  button { background:var(--accent); color:#04121f; border:0; border-radius:7px;
+           padding:9px 16px; font-size:14px; font-weight:600; cursor:pointer; }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+  button.ghost { background:transparent; color:var(--text); border:1px solid var(--line); font-weight:500; }
+  .out { background:#0b0d12; border:1px solid var(--line); border-radius:8px; padding:14px;
+         min-height:130px; white-space:pre-wrap; word-break:break-word; margin-top:12px; }
+  .cursor::after { content:"▍"; color:var(--accent); animation:blink 1s steps(2) infinite; }
+  @keyframes blink { 50%{opacity:0;} }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:10px; margin-top:12px; }
+  .stat { background:#0d0f14; border:1px solid var(--line); border-radius:7px; padding:8px 11px; }
+  .stat .k { color:var(--dim); font-size:11px; letter-spacing:.4px; text-transform:uppercase; }
+  .stat .v { font-size:16px; font-variant-numeric:tabular-nums; }
+  .badge { display:inline-block; font-size:11px; padding:2px 8px; border-radius:99px;
+           border:1px solid var(--line); color:var(--dim); }
+  .badge.ok { border-color:var(--ok); color:var(--ok); }
+  .badge.err { border-color:var(--err); color:var(--err); }
+  .log { background:#0b0d12; border:1px solid var(--line); border-radius:8px; padding:10px;
+         max-height:180px; overflow:auto; font:12px/1.5 ui-monospace,Consolas,monospace;
+         color:var(--dim); margin-top:10px; }
+  .log .t { color:var(--accent); }
+  .log .e { color:var(--err); }
+  h2 { font-size:14px; margin:0 0 12px; color:var(--dim); font-weight:600; letter-spacing:.3px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Unit 7 · 全栈打通</h1>
+  <div class="sub">
+    后端 <code>http://127.0.0.1:8000</code> ·
+    这个页面是独立的静态文件，和 FastAPI **不同源**，所以每个请求都是跨域请求
+  </div>
+
+  <div class="card">
+    <h2>0 · 先探测后端</h2>
+    <div class="row">
+      <span id="healthBadge" class="badge">未检测</span>
+      <button class="ghost" id="btnHealth">检测 /health</button>
+      <span style="color:var(--dim);font-size:12px">
+        这一步是排查 CORS 的第一现场：能拿到数据说明跨域通了
+      </span>
+    </div>
+    <div class="log" id="healthLog">点击「检测」开始…</div>
+  </div>
+
+  <div class="card">
+    <h2>1 · 不花钱的链路验证</h2>
+    <div class="row">
+      <input type="text" id="demoText" value="这条链路通了，说明浏览器能消费后端的 SSE。" />
+      <button id="btnDemo">跑 demo 流</button>
+    </div>
+    <div class="out" id="demoOut" style="min-height:80px"><span style="color:var(--dim)">等待…</span></div>
+  </div>
+
+  <div class="card">
+    <h2>2 · 真实模型对话</h2>
+    <div class="row">
+      <input type="text" id="q" value="用三句话解释什么是 CORS" />
+      <button id="btnChat">发送</button>
+      <button class="ghost" id="btnStop" disabled>停止</button>
+    </div>
+    <div class="out" id="out"><span style="color:var(--dim)">等待提问…</span></div>
+    <div class="stats">
+      <div class="stat"><div class="k">首字延迟</div><div class="v" id="ttft">—</div></div>
+      <div class="stat"><div class="k">总耗时</div><div class="v" id="total">—</div></div>
+      <div class="stat"><div class="k">分块</div><div class="v" id="chunks">0</div></div>
+      <div class="stat"><div class="k">状态</div><div class="v"><span class="badge" id="status">空闲</span></div></div>
+    </div>
+    <div class="log" id="log">事件会显示在这里…</div>
+  </div>
+</div>
+
+<script>
+/* ==================================================================
+   后端地址：改这里就能切换目标
+   ================================================================== */
+const BACKEND = "http://127.0.0.1:8000";
+
+const $ = (id) => document.getElementById(id);
+const now = () => performance.now() / 1000;
+
+function pushLog(el, text, cls = "") {
+  const d = document.createElement("div");
+  if (cls) d.className = cls;
+  d.textContent = text;
+  el.appendChild(d);
+  el.scrollTop = el.scrollHeight;
+}
+
+/* ------------------------------------------------------------------
+   SSE 解析器（Unit 6 已学过，这里原样复用）
+   ------------------------------------------------------------------ */
+async function* parseSSE(response) {
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let idx;
+      while ((idx = buffer.indexOf("\n\n")) !== -1) {
+        const raw = buffer.slice(0, idx);
+        buffer = buffer.slice(idx + 2);
+        if (!raw.trim()) continue;
+        const payload = raw.split("\n")
+          .filter((l) => l.startsWith("data:"))
+          .map((l) => l.slice(5).trimStart())
+          .join("\n");
+        if (payload) yield payload;
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+/* ---------------- 0. 健康检查 ---------------- */
+$("btnHealth").onclick = async () => {
+  const log = $("healthLog");
+  const badge = $("healthBadge");
+  log.textContent = "";
+  badge.className = "badge";
+  badge.textContent = "检测中";
+
+  const t0 = now();
+  try {
+    const r = await fetch(`${BACKEND}/health`);
+    const data = await r.json();
+    pushLog(log, `✅ HTTP ${r.status} · 耗时 ${((now() - t0) * 1000).toFixed(0)}ms`, "t");
+    pushLog(log, `   model = ${data.model}`);
+    pushLog(log, `   key_configured = ${data.key_configured}`);
+    pushLog(log, `   允许的来源 = ${data.allow_origins.join(", ")}`);
+    badge.className = "badge ok";
+    badge.textContent = "已连通";
+  } catch (e) {
+    pushLog(log, `❌ ${e.name}: ${e.message}`, "e");
+    pushLog(log, "   常见原因：后端没启动 / 端口不对 / CORS 没配", "e");
+    pushLog(log, "   打开浏览器开发者工具 → Console 看具体报错", "e");
+    badge.className = "badge err";
+    badge.textContent = "连接失败";
+  }
+};
+
+/* ---------------- 1. demo 流 ---------------- */
+$("btnDemo").onclick = async () => {
+  const btn = $("btnDemo");
+  btn.disabled = true;
+  const out = $("demoOut");
+  out.textContent = "";
+  try {
+    const url = `${BACKEND}/stream/demo?delay=0.05&text=${encodeURIComponent($("demoText").value)}`;
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    for await (const payload of parseSSE(resp)) {
+      if (payload === "[DONE]") break;
+      const ev = JSON.parse(payload);
+      if (ev.type === "delta") {
+        out.textContent += ev.content;
+        out.classList.add("cursor");
+      }
+    }
+  } catch (e) {
+    out.textContent = `错误：${e.message}`;
+  } finally {
+    out.classList.remove("cursor");
+    btn.disabled = false;
+  }
+};
+
+/* ---------------- 2. 真实对话 ---------------- */
+let controller = null;
+
+$("btnStop").onclick = () => controller?.abort();
+
+$("btnChat").onclick = async () => {
+  if (controller) controller.abort();
+  controller = new AbortController();
+  const btn = $("btnChat"), stop = $("btnStop");
+  btn.disabled = true; stop.disabled = false;
+
+  const out = $("out"), log = $("log");
+  out.innerHTML = ""; log.textContent = "";
+  $("chunks").textContent = "0";
+  $("ttft").textContent = "—";
+  $("total").textContent = "—";
+  const st = $("status");
+  st.className = "badge"; st.textContent = "请求中";
+
+  const t0 = now();
+  let chunks = 0;
+
+  try {
+    const resp = await fetch(`${BACKEND}/chat/stream`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messages: [{ role: "user", content: $("q").value }],
+        temperature: 0.7,
+        max_tokens: 512,
+      }),
+      signal: controller.signal,
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
+    for await (const payload of parseSSE(resp)) {
+      if (payload === "[DONE]") { pushLog(log, "[DONE]", "t"); break; }
+      const ev = JSON.parse(payload);
+      if (ev.type === "first_token") {
+        $("ttft").textContent = ev.ttft.toFixed(2) + "s";
+        pushLog(log, `first_token @ ${ev.ttft}s`, "t");
+      } else if (ev.type === "delta") {
+        chunks++;
+        $("chunks").textContent = chunks;
+        out.textContent += ev.content;
+        out.classList.add("cursor");
+      } else if (ev.type === "usage") {
+        pushLog(log, `usage: in=${ev.prompt_tokens} out=${ev.completion_tokens}`, "t");
+      } else if (ev.type === "done") {
+        $("total").textContent = ev.elapsed.toFixed(2) + "s";
+        pushLog(log, `done @ ${ev.elapsed}s`, "t");
+        st.className = "badge ok"; st.textContent = "完成";
+      } else if (ev.type === "error") {
+        pushLog(log, "服务端错误: " + ev.message, "e");
+        st.className = "badge err"; st.textContent = "出错";
+      }
+    }
+  } catch (e) {
+    if (e.name === "AbortError") {
+      pushLog(log, "已中断", "t");
+      st.textContent = "已中断";
+    } else {
+      pushLog(log, `错误: ${e.message}`, "e");
+      pushLog(log, "若是 TypeError: Failed to fetch → 多半是 CORS 或后端没启动", "e");
+      st.className = "badge err"; st.textContent = "出错";
+    }
+  } finally {
+    out.classList.remove("cursor");
+    btn.disabled = false; stop.disabled = true;
+    controller = null;
+  }
+};
+</script>
+</body>
+</html>

@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Unit 10 · 上下文管理</title>
+<style>
+  :root { --bg:#0f1115; --panel:#171a21; --line:#2a2f3a; --text:#e6e8ee; --dim:#8b93a5;
+          --accent:#4d9fff; --ok:#3ddc97; --err:#ff6b6b; --warn:#ffb454;
+          --sys:#bd93f9; --hist:#4d9fff; --drop:#444a58; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text);
+         font:14.5px/1.7 -apple-system,"Segoe UI","PingFang SC",sans-serif; }
+  .wrap { max-width:900px; margin:0 auto; padding:24px 16px 80px; }
+  h1 { font-size:19px; margin:0 0 4px; }
+  .sub { color:var(--dim); font-size:12.5px; margin-bottom:18px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px;
+          padding:15px; margin-bottom:16px; }
+  h2 { font-size:13.5px; margin:0 0 12px; color:var(--dim); font-weight:600; letter-spacing:.3px; }
+  .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  select, input[type=number] { background:#0d0f14; border:1px solid var(--line); color:var(--text);
+                                border-radius:7px; padding:7px 10px; font-size:13.5px; outline:none; }
+  input[type=text] { flex:1; min-width:200px; background:#0d0f14; border:1px solid var(--line);
+                     color:var(--text); border-radius:7px; padding:8px 11px; font-size:14px; outline:none; }
+  button { background:var(--accent); color:#04121f; border:0; border-radius:7px;
+           padding:8px 15px; font-weight:600; cursor:pointer; font-size:13.5px; }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+  button.ghost { background:transparent; color:var(--text); border:1px solid var(--line); font-weight:500; }
+
+  /* ---------- 预算表 ---------- */
+  pre.budget { background:#0b0d12; border:1px solid var(--line); border-radius:8px;
+               padding:12px; overflow:auto; font:12.5px/1.65 ui-monospace,Consolas,monospace;
+               color:#c3c9d6; margin:0; }
+
+  /* ---------- 对比表 ---------- */
+  table { width:100%; border-collapse:collapse; font-size:13.5px; }
+  th, td { padding:9px 11px; border-bottom:1px solid var(--line); text-align:left; }
+  th { color:var(--dim); font-weight:600; font-size:12.5px; }
+  td.num { font-variant-numeric:tabular-nums; }
+  .bar { height:7px; background:#222833; border-radius:99px; overflow:hidden; min-width:60px; }
+  .bar > i { display:block; height:100%; background:var(--accent); }
+  .bar > i.hi { background:var(--err); }
+  .tag { font-size:11px; padding:1px 7px; border-radius:99px; border:1px solid var(--line); color:var(--dim); }
+  .tag.bad { border-color:var(--err); color:var(--err); }
+  .tag.good { border-color:var(--ok); color:var(--ok); }
+
+  /* ---------- 上下文可视化 ---------- */
+  .ctx { display:flex; flex-wrap:wrap; gap:5px; margin-top:10px; }
+  .blk { height:22px; border-radius:4px; display:grid; place-items:center;
+         font-size:10px; color:#04121f; font-weight:600; overflow:hidden; white-space:nowrap; }
+  .blk.sys { background:var(--sys); }
+  .blk.hist { background:var(--hist); color:#04121f; }
+  .blk.drop { background:var(--drop); color:var(--dim); }
+  .legend { display:flex; gap:14px; margin-top:10px; font-size:12px; color:var(--dim); flex-wrap:wrap; }
+  .legend i { display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:5px;
+              vertical-align:middle; }
+
+  .log { background:#0b0d12; border:1px solid var(--line); border-radius:8px; padding:10px;
+         max-height:200px; overflow:auto; font:12px/1.55 ui-monospace,Consolas,monospace;
+         color:var(--dim); }
+  .log .t { color:var(--accent); } .log .e { color:var(--err); } .log .ok { color:var(--ok); }
+  .out { background:#0b0d12; border:1px solid var(--line); border-radius:8px; padding:13px;
+         min-height:100px; white-space:pre-wrap; word-break:break-word; margin-top:10px; }
+  .cursor::after { content:"▍"; color:var(--accent); animation:blink 1s steps(2) infinite; }
+  @keyframes blink { 50%{opacity:0;} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Unit 10 · 上下文管理</h1>
+  <div class="sub">
+    观察「完整历史」如何把 token 撑爆，以及滑动窗口 / 摘要压缩各自付出什么代价
+  </div>
+
+  <!-- 1. 预算 -->
+  <div class="card">
+    <h2>1 · 你给上下文窗口的钱是怎么分的</h2>
+    <pre class="budget" id="budgetBox">加载中…</pre>
+  </div>
+
+  <!-- 2. 三策略对比 -->
+  <div class="card">
+    <h2>2 · 同一份历史，三种策略的裁剪效果（不花钱）</h2>
+    <div class="row" style="margin-bottom:12px">
+      <label style="color:var(--dim);font-size:13px">模拟轮数</label>
+      <input type="number" id="turns" value="12" min="1" max="40" style="width:80px">
+      <label style="color:var(--dim);font-size:13px">预算 token</label>
+      <input type="number" id="budget" value="800" min="100" max="20000" style="width:110px">
+      <button id="btnCompare">跑对比</button>
+    </div>
+    <div id="compareBox" style="color:var(--dim);font-size:13px">点「跑对比」查看结果</div>
+  </div>
+
+  <!-- 3. 真实对话 -->
+  <div class="card">
+    <h2>3 · 真实对话：看裁剪如何影响回答</h2>
+    <div class="row">
+      <label style="color:var(--dim);font-size:13px">策略</label>
+      <select id="strategy">
+        <option value="none">none（不裁剪，观察劣化）</option>
+        <option value="sliding" selected>sliding（滑动窗口）</option>
+        <option value="summarize">summarize（摘要压缩）</option>
+      </select>
+      <input type="text" id="q" value="请记住：我叫张三，在做 AI 应用转型。现在只回复「好的」。">
+      <button id="btnSend">发送</button>
+    </div>
+    <div class="out" id="out"><span style="color:var(--dim)">先发几轮，让上下文变长，再换策略对比</span></div>
+    <div class="ctx" id="ctxViz"></div>
+    <div class="legend">
+      <span><i style="background:var(--sys)"></i>System</span>
+      <span><i style="background:var(--hist)"></i>保留的历史</span>
+      <span><i style="background:var(--drop)"></i>被丢弃</span>
+    </div>
+    <div class="log" id="log" style="margin-top:10px">事件会显示在这里…</div>
+    <div class="row" style="margin-top:10px">
+      <button class="ghost" id="btnReset">清空对话历史</button>
+      <span style="color:var(--dim);font-size:12px" id="turnInfo"></span>
+    </div>
+  </div>
+</div>
+
+<script>
+const BACKEND = "http://127.0.0.1:8000";
+const $ = (id) => document.getElementById(id);
+
+/* 本地维护的对话历史 —— 这就是"每轮都要重发"的那份 */
+let history = [];
+
+function log(text, cls = "") {
+  const el = $("log");
+  const d = document.createElement("div");
+  if (cls) d.className = cls;
+  d.textContent = text;
+  el.appendChild(d);
+  el.scrollTop = el.scrollHeight;
+}
+
+/* ---------------- 1. 预算表 ---------------- */
+(async () => {
+  try {
+    const r = await fetch(`${BACKEND}/budget`);
+    const d = await r.json();
+    $("budgetBox").textContent = d.table;
+    $("budget").value = d.max_history_tokens;
+  } catch (e) {
+    $("budgetBox").textContent = `加载失败：${e.message}\n\n后端没启动？先跑：\n.venv/bin/uvicorn main:app --port 8000`;
+  }
+})();
+
+/* ---------------- 2. 三策略对比 ---------------- */
+function makeHistory(turns) {
+  const msgs = [{ role: "system", content: "你是一个乐于助人的 AI 助手。" }];
+  for (let i = 0; i < turns; i++) {
+    msgs.push({ role: "user", content: `第 ${i + 1} 轮问题：` + "这是用户的一段较长的问题内容。".repeat(4) });
+    msgs.push({ role: "assistant", content: `第 ${i + 1} 轮回答：` + "这是助手的一段较长的回答内容。".repeat(4) });
+  }
+  return msgs;
+}
+
+$("btnCompare").onclick = async () => {
+  const btn = $("btnCompare");
+  btn.disabled = true;
+  const box = $("compareBox");
+  box.innerHTML = '<span style="color:var(--dim)">计算中…</span>';
+  try {
+    const msgs = makeHistory(Number($("turns").value));
+    const r = await fetch(`${BACKEND}/compare`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages: msgs, max_history_tokens: Number($("budget").value) }),
+    });
+    const data = await r.json();
+    const maxTok = Math.max(...data.results.map((x) => x.original_tokens));
+
+    box.innerHTML = `
+      <table>
+        <thead><tr>
+          <th>策略</th><th>原始</th><th>最终</th><th>省下</th>
+          <th>丢弃消息</th><th>发送条数</th><th>体积</th><th>判定</th>
+        </tr></thead>
+        <tbody>
+        ${data.results.map((x) => {
+          const over = x.final_tokens > data.budget;
+          const pct = Math.min(100, (x.final_tokens / maxTok) * 100);
+          return `<tr>
+            <td><code>${x.strategy}</code></td>
+            <td class="num">${x.original_tokens}</td>
+            <td class="num">${x.final_tokens}</td>
+            <td class="num">${(x.saved_ratio * 100).toFixed(1)}%</td>
+            <td class="num">${x.dropped}</td>
+            <td class="num">${x.messages_sent}</td>
+            <td><div class="bar"><i class="${over ? "hi" : ""}" style="width:${pct}%"></i></div></td>
+            <td>${over
+              ? '<span class="tag bad">超预算</span>'
+              : '<span class="tag good">合规</span>'}</td>
+          </tr>`;
+        }).join("")}
+        </tbody>
+      </table>
+      <p style="color:var(--dim);font-size:12.5px;margin:10px 0 0">
+        预算 = ${data.budget} tokens。
+        <b>none</b> 超预算 → 真实调用会直接报「context length exceeded」；
+        <b>sliding</b> 硬丢旧消息，省 token 但丢上下文；
+        <b>summarize</b> 丢得最多但不完全失忆（摘要保留了关键信息）。
+      </p>`;
+  } catch (e) {
+    box.innerHTML = `<span style="color:var(--err)">失败：${e.message}</span>`;
+  } finally {
+    btn.disabled = false;
+  }
+};
+
+/* ---------------- 3. 真实对话 ---------------- */
+async function* parseSSE(response) {
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let idx;
+      while ((idx = buffer.indexOf("\n\n")) !== -1) {
+        const raw = buffer.slice(0, idx);
+        buffer = buffer.slice(idx + 2);
+        if (!raw.trim()) continue;
+        const payload = raw.split("\n").filter((l) => l.startsWith("data:"))
+          .map((l) => l.slice(5).trimStart()).join("\n");
+        if (payload) yield payload;
+      }
+    }
+  } finally { reader.releaseLock(); }
+}
+
+/* 可视化：System / 历史 / 丢弃 */
+function drawContext(budget, before, final, dropped, strategy) {
+  const viz = $("ctxViz");
+  const total = Math.max(before, 1);
+  // 估算 System 占比（按 300 token 粗算）
+  const sysTok = 300;
+  const histTok = Math.max(0, final - sysTok);
+  const dropTok = Math.max(0, before - final);
+
+  const seg = (cls, tok, label) => {
+    if (tok <= 0) return "";
+    const w = Math.max(1.5, (tok / total) * 100);
+    return `<div class="blk ${cls}" style="width:${w}%" title="${label}: ${tok} tokens">${label}</div>`;
+  };
+
+  viz.innerHTML =
+    seg("sys", sysTok, "sys") +
+    seg("hist", histTok, `历史 ${histTok}`) +
+    seg("drop", dropTok, `丢弃 ${dropTok}`);
+
+  if (dropped > 0) {
+    log(`策略 ${strategy}：丢弃 ${dropped} 条旧消息，节省约 ${dropTok} tokens`, "t");
+  }
+}
+
+async function send() {
+  const text = $("q").value.trim();
+  if (!text) return;
+  const btn = $("btnSend");
+  btn.disabled = true;
+  $("log").textContent = "";
+  const out = $("out");
+  out.textContent = "";
+  out.classList.add("cursor");
+
+  history.push({ role: "user", content: text });
+  let answer = "";
+
+  try {
+    const r = await fetch(`${BACKEND}/chat/stream`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messages: history,
+        strategy: $("strategy").value,
+        max_history_tokens: Number($("budget").value),
+        max_tokens: 512,
+      }),
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+
+    let trimInfo = null;
+    for await (const payload of parseSSE(r)) {
+      if (payload === "[DONE]") break;
+      const ev = JSON.parse(payload);
+      if (ev.type === "trim") {
+        trimInfo = ev;
+        log(`裁剪前 ${ev.before_tokens} tokens（预算 ${ev.budget}，策略 ${ev.strategy}）`, "t");
+      } else if (ev.type === "status") {
+        log(ev.message, "t");
+      } else if (ev.type === "trimmed") {
+        log(`裁剪后 ${ev.final_tokens} tokens，丢弃 ${ev.dropped} 条，发送 ${ev.messages_sent} 条`, "ok");
+        drawContext(ev.budget || Number($("budget").value), trimInfo?.before_tokens || 0,
+                    ev.final_tokens, ev.dropped, $("strategy").value);
+      } else if (ev.type === "summary") {
+        log(`摘要：${ev.text.slice(0, 100)}…`, "t");
+      } else if (ev.type === "first_token") {
+        log(`首字 ${ev.ttft}s`, "t");
+      } else if (ev.type === "delta") {
+        answer += ev.content;
+        out.textContent = answer;
+      } else if (ev.type === "usage") {
+        log(`usage: in=${ev.prompt_tokens} out=${ev.completion_tokens}`, "t");
+      } else if (ev.type === "done") {
+        log(`完成 ${ev.elapsed}s`, "ok");
+      } else if (ev.type === "error") {
+        log(`错误：${ev.message}`, "e");
+        out.innerHTML = `<span style="color:var(--err)">${ev.message}</span>`;
+      }
+    }
+    if (answer) history.push({ role: "assistant", content: answer });
+    $("turnInfo").textContent = `本地历史 ${history.length} 条`;
+  } catch (e) {
+    out.textContent = `失败：${e.message}`;
+    log(e.message, "e");
+    history.pop();
+  } finally {
+    out.classList.remove("cursor");
+    btn.disabled = false;
+  }
+}
+
+$("btnSend").onclick = send;
+$("q").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); send(); }
+});
+$("btnReset").onclick = () => {
+  history = [];
+  $("out").textContent = "已清空";
+  $("ctxViz").innerHTML = "";
+  $("log").textContent = "";
+  $("turnInfo").textContent = "本地历史 0 条";
+};
+</script>
+</body>
+</html>
