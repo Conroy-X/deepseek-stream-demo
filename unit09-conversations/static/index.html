@@ -302,11 +302,13 @@ async function send() {
   $("btnStop").style.display = "block";
 
   let raw = "";
+  let failed = false;      // 服务端已给出 error 事件，finally 里别再覆盖它
+  let truncated = false;   // done.truncated：正文被 max_tokens 截断
   try {
     const resp = await fetch(`${BACKEND}/conversations/${currentId}/messages`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content: text, temperature: 0.7, max_tokens: 1024 }),
+      body: JSON.stringify({ content: text, temperature: 0.7, max_tokens: 4096 }),
       signal: controller.signal,
     });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
@@ -319,7 +321,10 @@ async function send() {
         aiEl.innerHTML = renderMarkdown(raw);
         scrollBottom();
       } else if (ev.type === "error") {
+        failed = true;
         aiEl.innerHTML = `<span style="color:var(--err)">出错：${escapeHtml(ev.message)}</span>`;
+      } else if (ev.type === "done" && ev.truncated) {
+        truncated = true;
       }
     }
   } catch (e) {
@@ -331,7 +336,12 @@ async function send() {
     }
   } finally {
     aiEl.classList.remove("cursor");
-    if (!raw) aiEl.textContent = "（无输出）";
+    // 有错误就保留错误文案；真的什么都没收到才提示「无输出」
+    if (!raw && !failed) aiEl.innerHTML = '<span style="color:var(--dim)">模型没有输出正文</span>';
+    if (truncated && raw) {
+      aiEl.innerHTML += '<div style="color:var(--dim);font-size:12.5px;margin-top:6px">'
+        + '（回答达到 max_tokens 上限，末尾被截断）</div>';
+    }
     controller = null;
     $("btnSend").disabled = false;
     $("btnStop").style.display = "none";

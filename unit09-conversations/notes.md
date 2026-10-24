@@ -56,6 +56,38 @@ LLM 本身**没有记忆**。所谓「多轮对话」是应用层每次把完整
 
 实测验证过：缺 Key 时请求失败，但用户消息已经在数据库里了。
 
+## 踩坑：推理模型的 max_tokens 是「思考 + 正文」的总预算
+
+**现象**：问「给我对比 萍乡和南昌的人口」，界面回一句「（无输出）」，`chat.db` 里只有 user 消息。
+
+**排查三步**（这套顺序值得背下来）：
+
+1. **先确认接口通不通**：`/health` 正常，直接 `curl` 这个 SSE 接口，拿到的只有 `usage` + `done`，
+   **一个 `delta` 都没有** → 不是网络、不是 CORS、也不是前端解析。
+2. **再看 `usage.completion_tokens`**：`1024`，正好等于请求里的 `max_tokens` 上限 →
+   不是「模型没说话」，而是**预算刚好用完**。
+3. **最后看 `completion_tokens_details.reasoning_tokens`**：`1024`，和 completion 完全相等 →
+   1024 个 token **全花在思考上**，正文一个字都没轮到。
+
+**根因**：`deepseek-flash` 是推理模型，`max_tokens` 限制的是 `reasoning + content` 的**总量**，
+不是只限正文。同一个问题实测：预算 4096 时 `reasoning_tokens=2748`、正文 735 字；
+预算 1024 时思考到一半就被 `finish_reason=length` 掐断，正文长度 0。
+
+**修法**（三层都要动，缺一层就会再犯）：
+
+| 层 | 要改什么 |
+| --- | --- |
+| 请求默认值 | `max_tokens` 512/1024 → 4096（`MAX_TOKENS_DEFAULT` 可用环境变量覆盖） |
+| 服务端 | 抓到 `finish_reason == "length"` 且正文为空时，**返回 `error` 事件说明原因**，不要静默 `done` |
+| 前端 | ① 请求预算同步调大；② 显示 error 后别被兜底的「（无输出）」覆盖掉 |
+
+另外：**有正文但也被截断**（`finish_reason=length` 且有内容）的情况，`done` 事件会带
+`truncated: true`，前端在回答末尾补一行「（回答达到 max_tokens 上限，末尾被截断）」，
+避免用户把半截答案当成完整答案。
+
+**一句话**：凡是「模型没反应」类的问题，先看 `finish_reason` 和 `usage`，比猜前端哪行代码靠谱得多。
+`finish_reason=length` + 正文为空 = 一定是预算被推理吃光了。
+
 ## 面试追问
 
 **Q: 为什么用 SQLite？**

@@ -279,7 +279,7 @@ async function send() {
         messages: history,
         strategy: $("strategy").value,
         max_history_tokens: Number($("budget").value),
-        max_tokens: 512,
+        max_tokens: 4096,
       }),
     });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);

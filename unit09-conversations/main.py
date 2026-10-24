@@ -48,6 +48,11 @@ load_dotenv(Path(__file__).with_name(".env"))
 API_KEY = os.getenv("DEEPSEEK_API_KEY", "").strip()
 BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
 MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-flash")
+
+# deepseek-flash 是推理模型：max_tokens 是「思考 + 正文」的**总**预算。
+# 实测一个普通问题 reasoning_tokens 就能到 2700+，所以 1024 会把额度全耗在思考上，
+# 正文一个字都出不来（前端表现为「（无输出）」）。默认给到 4096。
+MAX_TOKENS_DEFAULT = int(os.getenv("MAX_TOKENS_DEFAULT", "4096"))
 DB_PATH = Path(os.getenv("DB_PATH", Path(__file__).with_name("chat.db")))
 
 ALLOW_ORIGINS = [
@@ -208,7 +213,7 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     messages: list[ChatMessage] = Field(min_length=1)
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
-    max_tokens: int = Field(default=1024, ge=1, le=4096)
+    max_tokens: int = Field(default=MAX_TOKENS_DEFAULT, ge=1, le=4096)
 
 
 class NewConversation(BaseModel):
@@ -222,7 +227,7 @@ class RenameRequest(BaseModel):
 class SendMessage(BaseModel):
     content: str = Field(min_length=1, max_length=8000)
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
-    max_tokens: int = Field(default=1024, ge=1, le=4096)
+    max_tokens: int = Field(default=MAX_TOKENS_DEFAULT, ge=1, le=4096)
 
 
 _client: AsyncOpenAI | None = None
@@ -239,6 +244,16 @@ def get_client() -> AsyncOpenAI:
 
 def sse(data: dict) -> str:
     return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+def empty_answer_hint(max_tokens: int, finish_reason: str | None, reasoning_tokens: int | None) -> str:
+    """正文为空时给一句能直接照做的提示（别让前端只显示「（无输出）」）。"""
+    if finish_reason == "length":
+        return (
+            f"推理耗尽了 max_tokens={max_tokens}（reasoning_tokens≈{reasoning_tokens}），"
+            "正文还没开始就被截断。把 max_tokens 调到 4096 再试。"
+        )
+    return f"模型没有返回正文（finish_reason={finish_reason}）。"
 
 
 # ---------------------------------------------------------------------------
@@ -322,19 +337,27 @@ async def api_send(cid: str, req: SendMessage, request: Request) -> StreamingRes
                 stream_options={"include_usage": True},
             )
             first = True
+            finish_reason: str | None = None
+            reasoning_tokens: int | None = None
             async for chunk in stream:
                 if await request.is_disconnected():
                     break
                 if chunk.usage:
+                    details = getattr(chunk.usage, "completion_tokens_details", None)
+                    reasoning_tokens = getattr(details, "reasoning_tokens", None)
                     yield sse(
                         {
                             "type": "usage",
                             "prompt_tokens": chunk.usage.prompt_tokens,
                             "completion_tokens": chunk.usage.completion_tokens,
+                            # 推理 token 和正文共用 max_tokens，必须一起看
+                            "reasoning_tokens": reasoning_tokens,
                         }
                     )
                 if not chunk.choices:
                     continue
+                if chunk.choices[0].finish_reason:
+                    finish_reason = chunk.choices[0].finish_reason
                 delta = chunk.choices[0].delta.content
                 if not delta:
                     continue
@@ -345,6 +368,15 @@ async def api_send(cid: str, req: SendMessage, request: Request) -> StreamingRes
                 yield sse({"type": "delta", "content": delta})
 
             answer = "".join(collected)
+            if not answer:
+                # 以前这里是静默 done，前端什么也拿不到，只能显示「（无输出）」
+                yield sse(
+                    {
+                        "type": "error",
+                        "message": empty_answer_hint(req.max_tokens, finish_reason, reasoning_tokens),
+                    }
+                )
+
             if answer:
                 add_message(cid, "assistant", answer)
                 # 首次对话自动用第一句话当标题
@@ -358,6 +390,8 @@ async def api_send(cid: str, req: SendMessage, request: Request) -> StreamingRes
                     "type": "done",
                     "elapsed": round(time.perf_counter() - started, 3),
                     "saved": bool(answer),
+                    # 有正文但 finish_reason=length：回答被预算截断
+                    "truncated": finish_reason == "length" and bool(answer),
                 }
             )
         except HTTPException as exc:
@@ -389,26 +423,42 @@ async def chat_stream(req: ChatRequest, request: Request) -> StreamingResponse:
                 stream_options={"include_usage": True},
             )
             first = True
+            finish_reason: str | None = None
+            reasoning_tokens: int | None = None
+            collected: list[str] = []
             async for chunk in stream:
                 if await request.is_disconnected():
                     break
                 if chunk.usage:
+                    details = getattr(chunk.usage, "completion_tokens_details", None)
+                    reasoning_tokens = getattr(details, "reasoning_tokens", None)
                     yield sse(
                         {
                             "type": "usage",
                             "prompt_tokens": chunk.usage.prompt_tokens,
                             "completion_tokens": chunk.usage.completion_tokens,
+                            "reasoning_tokens": reasoning_tokens,
                         }
                     )
                 if not chunk.choices:
                     continue
+                if chunk.choices[0].finish_reason:
+                    finish_reason = chunk.choices[0].finish_reason
                 delta = chunk.choices[0].delta.content
                 if not delta:
                     continue
                 if first:
                     first = False
                     yield sse({"type": "first_token", "ttft": round(time.perf_counter() - started, 3)})
+                collected.append(delta)
                 yield sse({"type": "delta", "content": delta})
+            if not collected:
+                yield sse(
+                    {
+                        "type": "error",
+                        "message": empty_answer_hint(req.max_tokens, finish_reason, reasoning_tokens),
+                    }
+                )
             yield sse({"type": "done", "elapsed": round(time.perf_counter() - started, 3)})
         except HTTPException as exc:
             yield sse({"type": "error", "message": exc.detail})

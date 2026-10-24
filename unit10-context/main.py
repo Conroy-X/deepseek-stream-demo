@@ -114,7 +114,8 @@ async def llm_summarizer(old_messages: list[dict]) -> str:
             {"role": "user", "content": f"对话记录：\n{transcript}\n\n请输出摘要："},
         ],
         temperature=0.2,
-        max_tokens=300,
+        # 摘要虽然短，但推理模型会先在思考里花掉一部分；300 容易只拿到空串
+        max_tokens=800,
     )
     return (resp.choices[0].message.content or "").strip()
 
@@ -171,7 +172,8 @@ class ChatRequest(BaseModel):
     strategy: Literal["none", "sliding", "summarize"] = "sliding"
     max_history_tokens: int | None = Field(default=None, ge=100, le=200_000)
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
-    max_tokens: int = Field(default=1024, ge=1, le=4096)
+    # 推理模型：思考 token 与正文共用这个预算，1024 常被思考吃光
+    max_tokens: int = Field(default=4096, ge=1, le=4096)
 
 
 # ---------------------------------------------------------------------------
@@ -227,19 +229,26 @@ async def chat_stream(req: ChatRequest, request: Request) -> StreamingResponse:
                 stream_options={"include_usage": True},
             )
             first = True
+            finish_reason: str | None = None
+            reasoning_tokens: int | None = None
             async for chunk in stream:
                 if await request.is_disconnected():
                     break
                 if chunk.usage:
+                    details = getattr(chunk.usage, "completion_tokens_details", None)
+                    reasoning_tokens = getattr(details, "reasoning_tokens", None)
                     yield sse(
                         {
                             "type": "usage",
                             "prompt_tokens": chunk.usage.prompt_tokens,
                             "completion_tokens": chunk.usage.completion_tokens,
+                            "reasoning_tokens": reasoning_tokens,
                         }
                     )
                 if not chunk.choices:
                     continue
+                if chunk.choices[0].finish_reason:
+                    finish_reason = chunk.choices[0].finish_reason
                 delta = chunk.choices[0].delta.content
                 if not delta:
                     continue
@@ -248,6 +257,19 @@ async def chat_stream(req: ChatRequest, request: Request) -> StreamingResponse:
                     yield sse({"type": "first_token", "ttft": round(time.perf_counter() - started, 3)})
                 yield sse({"type": "delta", "content": delta})
 
+            if not first:
+                pass
+            else:
+                # 一个 delta 都没出：多半是推理把预算吃光了
+                if finish_reason == "length":
+                    msg = (
+                        f"推理耗尽了 max_tokens={req.max_tokens}"
+                        f"（reasoning_tokens≈{reasoning_tokens}），正文还没开始就被截断。"
+                        "把 max_tokens 调到 4096 再试。"
+                    )
+                else:
+                    msg = f"模型没有返回正文（finish_reason={finish_reason}）。"
+                yield sse({"type": "error", "message": msg})
             yield sse({"type": "done", "elapsed": round(time.perf_counter() - started, 3)})
         except HTTPException as exc:
             yield sse({"type": "error", "message": exc.detail})
