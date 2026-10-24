@@ -1,0 +1,23 @@
+# 本机已装 PostgreSQL 17 占着 5432，这里用 5433 避开冲突。
+# 用本机 PG 的话可以整个跳过，直接把 .env 的 DATABASE_URL 指向 socket。
+services:
+  db:
+    image: postgres:16
+    container_name: pg-ai
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ai_journey
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ai_journey"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:

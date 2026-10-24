@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Chat · project1</title>
+<style>
+  :root{--bg:#f7f7f5;--card:#fff;--line:#e3e2de;--text:#23231f;--dim:#7a7972;--accent:#185FA5;--ok:#0F6E56;--bad:#A32D2D}
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{background:var(--bg);color:var(--text);font:14px/1.65 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif}
+  button{font:inherit;cursor:pointer;border:1px solid var(--line);background:#fff;color:var(--text);border-radius:7px;padding:7px 13px;font-size:13px}
+  button:hover{background:#f0efec}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{background:#0C447C}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  input,textarea{font:inherit;font-size:13.5px;padding:8px 11px;border:1px solid var(--line);border-radius:8px;width:100%;background:#fff;color:var(--text);resize:none}
+  input:focus,textarea:focus{outline:2px solid #B5D4F4;outline-offset:-1px}
+
+  .login{max-width:380px;margin:12vh auto;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:26px}
+  .login h1{font-size:20px;font-weight:600;margin-bottom:4px}
+  .login p{color:var(--dim);font-size:13px;margin-bottom:18px}
+  .login .f{margin-bottom:10px}
+  .login .b{display:flex;gap:8px;margin-top:14px}
+  .err{color:var(--bad);font-size:12.5px;min-height:18px;margin-top:8px}
+
+  .app{display:none;height:100%;grid-template-columns:250px 1fr}
+  .app.on{display:grid}
+  .side{background:var(--card);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+  .side .top{padding:14px;border-bottom:1px solid var(--line)}
+  .side .me{font-size:12.5px;color:var(--dim);margin-bottom:9px;word-break:break-all}
+  .side .list{flex:1;overflow-y:auto;padding:8px}
+  .side .foot{padding:10px;border-top:1px solid var(--line);display:flex;gap:6px}
+  .conv{padding:9px 10px;border-radius:8px;cursor:pointer;margin-bottom:4px}
+  .conv:hover{background:#f0efec}
+  .conv.active{background:#E6F1FB}
+  .conv .t{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .conv .p{font-size:11.5px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+
+  .main{display:flex;flex-direction:column;min-height:0}
+  .main .head{padding:13px 20px;border-bottom:1px solid var(--line);background:var(--card);display:flex;justify-content:space-between;align-items:center;gap:12px}
+  .main .head h2{font-size:14.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .main .head .stat{font-size:11.5px;color:var(--dim);white-space:nowrap}
+  .msgs{flex:1;overflow-y:auto;padding:20px;scroll-behavior:smooth}
+  .msg{max-width:760px;margin:0 auto 16px}
+  .msg .who{font-size:11.5px;color:var(--dim);margin-bottom:4px}
+  .msg .bub{padding:11px 14px;border-radius:11px;white-space:pre-wrap;word-break:break-word;font-size:14px}
+  .msg.user .bub{background:#E6F1FB}
+  .msg.assistant .bub{background:var(--card);border:1px solid var(--line)}
+  .msg .meta{font-size:11px;color:var(--dim);margin-top:4px}
+  .composer{padding:13px 20px 18px;border-top:1px solid var(--line);background:var(--card)}
+  .composer .box{max-width:760px;margin:0 auto;display:flex;gap:9px;align-items:flex-end}
+  .composer textarea{min-height:46px;max-height:180px;overflow-y:auto}
+  .hint{max-width:760px;margin:7px auto 0;font-size:11.5px;color:var(--dim);display:flex;justify-content:space-between}
+  .empty{text-align:center;color:var(--dim);padding:60px 20px;font-size:13.5px}
+  .tag{display:inline-block;padding:1px 8px;border-radius:20px;font-size:11px;background:#f0efec;color:var(--dim)}
+  .tag.live{background:#E1F5EE;color:var(--ok)}
+  .tag.warn{background:#FAEEDA;color:#854F0B}
+  .tag.err{background:#FCEBEB;color:var(--bad)}
+  .cursor::after{content:"▌";animation:blink 1s steps(1) infinite;color:var(--accent)}
+  @keyframes blink{50%{opacity:0}}
+</style>
+</head>
+<body>
+
+<div class="login" id="login">
+  <h1>AI Chat</h1>
+  <p>项目 1 · FastAPI + PostgreSQL + JWT + SSE</p>
+  <div class="f"><input id="email" placeholder="email" value="demo@example.com"></div>
+  <div class="f"><input id="pass" type="password" placeholder="密码（≥8 位）" value="CorrectHorse2026"></div>
+  <div class="f"><input id="uname" placeholder="显示名（注册时用）" value="rik"></div>
+  <div class="b">
+    <button class="primary" style="flex:1" onclick="doLogin()">登录</button>
+    <button style="flex:1" onclick="doRegister()">注册</button>
+  </div>
+  <div class="err" id="err"></div>
+</div>
+
+<div class="app" id="app">
+  <aside class="side">
+    <div class="top">
+      <div class="me" id="me">—</div>
+      <button class="primary" style="width:100%" onclick="newConv()">＋ 新对话</button>
+    </div>
+    <div class="list" id="convs"></div>
+    <div class="foot">
+      <button style="flex:1" onclick="doLogout()">退出</button>
+      <button style="flex:1" onclick="loadConvs()">刷新</button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="head">
+      <h2 id="title">选一个对话，或者新建</h2>
+      <div class="stat" id="stat"></div>
+    </div>
+    <div class="msgs" id="msgs"><div class="empty">左边新建一个对话开始聊</div></div>
+    <div class="composer">
+      <div class="box">
+        <textarea id="input" placeholder="说点什么… (Enter 发送 / Shift+Enter 换行)"></textarea>
+        <button class="primary" id="sendBtn" onclick="sendMsg()">发送</button>
+      </div>
+      <div class="hint"><span>Enter 发送 · Shift+Enter 换行</span><span id="hint"></span></div>
+    </div>
+  </main>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let token = localStorage.getItem("p1_token") || "";
+let me = null;
+let currentConv = null;
+let sending = false;
+let abortCtrl = null;
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+async function api(path, opts = {}) {
+  const headers = Object.assign({}, opts.headers || {});
+  if (token) headers["Authorization"] = "Bearer " + token;
+  if (opts.body && typeof opts.body === "string") headers["Content-Type"] = "application/json";
+  const r = await fetch(path, Object.assign({}, opts, { headers }));
+  if (r.status === 401) { doLogout(); throw new Error("登录已过期"); }
+  if (!r.ok) {
+    let d = "";
+    try { d = (await r.json()).detail; } catch (e) { d = r.status; }
+    throw new Error(typeof d === "string" ? d : JSON.stringify(d));
+  }
+  return r.status === 204 ? null : r.json();
+}
+
+function showErr(m) { $("err").textContent = m || ""; }
+
+async function doRegister() {
+  try {
+    showErr("");
+    await api("register", {
+      method: "POST",
+      body: JSON.stringify({ email: $("email").value, password: $("pass").value, display_name: $("uname").value })
+    });
+    await doLogin();
+  } catch (e) { showErr("注册失败：" + e.message); }
+}
+
+async function doLogin() {
+  try {
+    showErr("");
+    const body = new URLSearchParams();
+    body.set("username", $("email").value);
+    body.set("password", $("pass").value);
+    const r = await api("login", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: body.toString()
+    });
+    token = r.access_token;
+    localStorage.setItem("p1_token", token);
+    await boot();
+  } catch (e) { showErr("登录失败：" + e.message); }
+}
+
+function doLogout() {
+  token = ""; me = null; currentConv = null;
+  localStorage.removeItem("p1_token");
+  $("app").classList.remove("on");
+  $("login").style.display = "block";
+}
+
+async function boot() {
+  try {
+    me = await api("me");
+  } catch (e) { doLogout(); return; }
+  $("login").style.display = "none";
+  $("app").classList.add("on");
+  $("me").textContent = `${me.display_name || "用户"} · ${me.email}`;
+  await loadConvs();
+}
+
+async function loadConvs() {
+  try {
+    const cs = await api("conversations");
+    $("convs").innerHTML = cs.length
+      ? cs.map(c => `<div class="conv ${currentConv === c.id ? "active" : ""}" onclick="openConv(${c.id})">
+          <div class="t">${esc(c.title)}</div>
+          <div class="p">${esc(c.last_message || "（空）")}</div>
+        </div>`).join("")
+      : '<div class="empty" style="padding:24px 8px;font-size:12.5px">还没有对话</div>';
+  } catch (e) { console.error(e); }
+}
+
+async function newConv() {
+  try {
+    const c = await api("conversations", { method: "POST", body: JSON.stringify({}) });
+    await loadConvs();
+    openConv(c.id);
+  } catch (e) { alert("新建失败：" + e.message); }
+}
+
+async function openConv(id) {
+  currentConv = id;
+  await loadConvs();
+  const cs = await api("conversations");
+  const c = cs.find(x => x.id === id);
+  $("title").textContent = c ? c.title : "对话";
+  const ms = await api(`conversations/${id}/messages`);
+  renderMessages(ms);
+}
+
+function renderMessages(ms) {
+  const box = $("msgs");
+  if (!ms.length) {
+    box.innerHTML = '<div class="empty">还没有消息，在下面输入开始吧</div>';
+    return;
+  }
+  box.innerHTML = ms.map(m => `
+    <div class="msg ${m.role}">
+      <div class="who">${m.role === "user" ? "我" : "AI"}</div>
+      <div class="bub">${esc(m.content)}</div>
+      ${m.tokens ? `<div class="meta">${m.tokens} 字符</div>` : ""}
+    </div>`).join("");
+  box.scrollTop = box.scrollHeight;
+}
+
+function appendBubble(role) {
+  document.querySelectorAll(".empty").forEach(e => e.remove());
+  const d = document.createElement("div");
+  d.className = "msg " + role;
+  d.innerHTML = `<div class="who">${role === "user" ? "我" : "AI"}</div>
+                 <div class="bub cursor"></div>
+                 <div class="meta"></div>`;
+  $("msgs").appendChild(d);
+  $("msgs").scrollTop = $("msgs").scrollHeight;
+  return d;
+}
+
+async function sendMsg() {
+  if (sending) return;
+  const text = $("input").value.trim();
+  if (!text) return;
+  if (!currentConv) { await newConv(); }
+
+  sending = true;
+  $("sendBtn").disabled = true;
+  $("input").value = "";
+  $("hint").innerHTML = '<span class="tag live">生成中</span>';
+
+  const ub = appendBubble("user");
+  ub.querySelector(".bub").textContent = text;
+  ub.querySelector(".bub").classList.remove("cursor");
+  const ab = appendBubble("assistant");
+  const bub = ab.querySelector(".bub");
+  const meta = ab.querySelector(".meta");
+
+  abortCtrl = new AbortController();
+  const t0 = performance.now();
+  let chars = 0;
+
+  try {
+    const r = await fetch(`conversations/${currentConv}/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token },
+      body: JSON.stringify({ content: text }),
+      signal: abortCtrl.signal
+    });
+
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      bub.textContent = "请求失败：" + (d.detail || r.status);
+      bub.classList.remove("cursor");
+      return;
+    }
+
+    const reader = r.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = "";
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        let idx;
+        while ((idx = buf.indexOf("\n\n")) !== -1) {
+          const raw = buf.slice(0, idx);
+          buf = buf.slice(idx + 2);
+          if (!raw.trim()) continue;
+          const payload = raw.split("\n").filter(l => l.startsWith("data:"))
+            .map(l => l.slice(5).trimStart()).join("\n");
+          if (!payload || payload === "[DONE]") continue;
+          const ev = JSON.parse(payload);
+          if (ev.type === "delta") {
+            chars += ev.content.length;
+            bub.textContent += ev.content;
+            $("msgs").scrollTop = $("msgs").scrollHeight;
+          } else if (ev.type === "retry") {
+            bub.textContent += `\n（重试 ${ev.attempt}：${ev.kind}）`;
+          } else if (ev.type === "error") {
+            bub.textContent += `\n[出错了：${ev.message}]`;
+          } else if (ev.type === "saved" && ev.interrupted) {
+            meta.textContent = "已中断，已保存 " + ev.chars + " 字";
+          } else if (ev.type === "done") {
+            const secs = ((performance.now() - t0) / 1000).toFixed(2);
+            meta.textContent = `${chars} 字 · ${secs}s · 首字 ${ev.ttft ?? "?"}s · ${ev.attempts} 次尝试`;
+          }
+        }
+      }
+    } finally {
+      try { await reader.cancel(); } catch (e) {}
+      reader.releaseLock();
+    }
+  } catch (e) {
+    if (e.name === "AbortError") bub.textContent += "\n[已停止]";
+    else bub.textContent += "\n[网络错误]";
+  } finally {
+    bub.classList.remove("cursor");
+    sending = false;
+    $("sendBtn").disabled = false;
+    $("hint").textContent = "";
+    await loadConvs();
+  }
+}
+
+$("input").addEventListener("keydown", e => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMsg(); }
+});
+
+if (token) boot().catch(() => doLogout());
+</script>
+</body>
+</html>

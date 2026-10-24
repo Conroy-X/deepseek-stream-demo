@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Unit 15 · Embedding 实验台</title>
+<style>
+  :root{--bg:#f7f7f5;--card:#fff;--line:#e3e2de;--text:#23231f;--dim:#7a7972;--accent:#185FA5;--ok:#0F6E56;--bad:#A32D2D;--warn:#854F0B}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font:14px/1.65 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;padding:20px}
+  .wrap{max-width:1040px;margin:0 auto}
+  h1{font-size:19px;font-weight:600}h2{font-size:13px;font-weight:600;color:var(--dim);margin-bottom:11px;letter-spacing:.02em}
+  .sub{color:var(--dim);font-size:13px;margin:4px 0 16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:15px;margin-bottom:14px}
+  textarea,input{width:100%;padding:8px 11px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:13.5px;background:#fff;color:var(--text);resize:vertical}
+  textarea{min-height:52px}
+  button{padding:7px 13px;border:1px solid var(--line);border-radius:7px;background:#fff;font:inherit;font-size:13px;cursor:pointer;color:var(--text)}
+  button:hover{background:#f0efec}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{background:#0C447C}
+  .row{display:flex;gap:8px;margin-bottom:9px;align-items:flex-start}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .banner{padding:9px 13px;border-radius:8px;font-size:13px;margin-bottom:14px;border:1px solid var(--line);background:var(--card)}
+  .banner.ok{border-color:#9FE1CB;background:#E1F5EE;color:var(--ok)}
+  .banner.warn{border-color:#FAC775;background:#FAEEDA;color:var(--warn)}
+  .score{display:flex;align-items:center;gap:14px;margin:14px 0 8px}
+  .score .num{font-size:30px;font-weight:600;letter-spacing:-.02em;min-width:110px}
+  .bar{flex:1;height:11px;background:#f0efec;border-radius:8px;overflow:hidden}
+  .bar i{display:block;height:100%;background:var(--accent);border-radius:8px;transition:width .35s ease}
+  .interp{font-size:13px;color:var(--dim)}
+  .kv{display:flex;justify-content:space-between;font-size:12.5px;padding:4px 0;border-bottom:1px dashed var(--line)}
+  .kv:last-child{border:0}
+  .hit{display:flex;gap:11px;align-items:flex-start;padding:9px 0;border-bottom:1px solid var(--line)}
+  .hit:last-child{border:0}
+  .hit .rank{font-size:11.5px;color:var(--dim);width:20px;flex:none;padding-top:2px}
+  .hit .body{flex:1}
+  .hit .txt{font-size:13.5px}
+  .hit .mini{height:5px;background:#f0efec;border-radius:5px;margin-top:6px;overflow:hidden}
+  .hit .mini i{display:block;height:100%;background:var(--accent);border-radius:5px}
+  .hit .sc{font-size:12px;color:var(--dim);width:52px;text-align:right;flex:none}
+  .vec{display:flex;gap:5px;align-items:flex-end;height:60px;margin-top:8px}
+  .vec i{width:16px;background:var(--accent);border-radius:3px 3px 0 0;display:block}
+  .note{font-size:12.5px;color:var(--warn);background:#FAEEDA;border:1px solid #FAC775;border-radius:8px;padding:9px 12px;margin-top:12px}
+  .err{color:var(--bad);font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Unit 15 · Embedding 实验台</h1>
+  <div class="sub">把句子变成向量 → 算余弦相似度 → 做 Top-K 召回</div>
+
+  <div class="banner" id="health">探测后端…</div>
+
+  <div class="card">
+    <h2>① 两句话有多近</h2>
+    <div class="two">
+      <textarea id="a">向量数据库用来存储 embedding</textarea>
+      <textarea id="b">向量库擅长存放和检索语义向量</textarea>
+    </div>
+    <div class="row" style="margin-top:9px">
+      <button class="primary" onclick="calcSim()">计算余弦相似度</button>
+      <button onclick="fillPair('汽车','轿车')">试同义词：汽车 / 轿车</button>
+      <button onclick="fillPair('向量数据库','PostgreSQL 索引')">试无关句</button>
+    </div>
+    <div id="simOut"></div>
+  </div>
+
+  <div class="card">
+    <h2>② Top-K 检索（RAG 的召回环节）</h2>
+    <div class="row">
+      <input id="q" value="哪个 Python 框架适合写 API">
+      <button class="primary" onclick="doSearch()" style="flex:none">检索</button>
+    </div>
+    <div id="searchOut"><div class="interp">点检索，从内置的 12 条语料里找最相关的</div></div>
+  </div>
+
+  <div class="card">
+    <h2>③ 向量长什么样</h2>
+    <div class="row">
+      <input id="vecText" value="机器学习">
+      <button onclick="showVec()" style="flex:none">看向量</button>
+    </div>
+    <div id="vecOut"></div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+async function api(path, body) {
+  const r = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+  if (!r.ok) throw new Error("HTTP " + r.status);
+  return r.json();
+}
+
+async function loadHealth() {
+  try {
+    const h = await (await fetch("health")).json();
+    const b = $("health");
+    if (h.semantic) {
+      b.className = "banner ok";
+      b.textContent = `后端：${h.provider} · ${h.dim} 维 · 真语义向量，同义词也能对上`;
+    } else {
+      b.className = "banner warn";
+      b.textContent = `后端：${h.provider} · ${h.dim} 维 · 只反映字面重叠，不代表语义（换 EMBEDDING_PROVIDER=api 才是真语义）`;
+    }
+  } catch (e) {
+    $("health").className = "banner warn";
+    $("health").textContent = "后端没响应：" + e.message;
+  }
+}
+
+function fillPair(x, y) { $("a").value = x; $("b").value = y; calcSim(); }
+
+async function calcSim() {
+  const a = $("a").value.trim(), b = $("b").value.trim();
+  if (!a || !b) return;
+  try {
+    const d = await api("similarity", { a, b });
+    const pct = Math.max(0, Math.min(1, (d.cosine + 1) / 2)) * 100;
+    const color = d.cosine >= 0.7 ? "var(--ok)" : d.cosine >= 0.4 ? "var(--accent)" : "var(--dim)";
+    $("simOut").innerHTML = `
+      <div class="score">
+        <div class="num" style="color:${color}">${d.cosine.toFixed(4)}</div>
+        <div>
+          <div class="bar"><i style="width:${pct}%;background:${color}"></i></div>
+          <div class="interp" style="margin-top:6px">${d.interpretation}</div>
+        </div>
+      </div>
+      <div class="kv"><span>点积 (a·b)</span><b>${d.dot}</b></div>
+      <div class="kv"><span>|a|</span><b>${d.norm_a}</b></div>
+      <div class="kv"><span>|b|</span><b>${d.norm_b}</b></div>
+      <div class="kv"><span>欧氏距离</span><b>${d.euclidean}</b></div>
+      <div class="kv"><span>后端</span><b>${d.provider}</b></div>
+      ${d.provider === "local-hashing" && d.cosine < 0.3
+        ? '<div class="note">相似度低不一定是"意思不相关" —— 本地后端只认字面重叠。<br>「汽车」和「轿车」意思几乎一样，但一个字都不重合，所以它算出来接近 0。</div>'
+        : ""}`;
+  } catch (e) {
+    $("simOut").innerHTML = `<div class="err">计算失败：${e.message}</div>`;
+  }
+}
+
+async function doSearch() {
+  const q = $("q").value.trim();
+  if (!q) return;
+  try {
+    const d = await api("search", { query: q, top_k: 5 });
+    const max = Math.max(...d.results.map(r => r.score), 0.0001);
+    $("searchOut").innerHTML = d.results.map((r, i) => `
+      <div class="hit">
+        <div class="rank">${i + 1}</div>
+        <div class="body">
+          <div class="txt">${esc(r.text)}</div>
+          <div class="mini"><i style="width:${Math.max(2, r.score / max * 100)}%"></i></div>
+        </div>
+        <div class="sc">${r.score.toFixed(3)}</div>
+      </div>`).join("");
+  } catch (e) {
+    $("searchOut").innerHTML = `<div class="err">检索失败：${e.message}</div>`;
+  }
+}
+
+async function showVec() {
+  const t = $("vecText").value.trim();
+  if (!t) return;
+  try {
+    const d = await api("embed", { texts: [t] });
+    const v = d.vectors_preview[0];
+    const absMax = Math.max(...v.map(x => Math.abs(x)), 0.0001);
+    $("vecOut").innerHTML = `
+      <div class="interp">${d.dim} 维 · 模长 ${d.norms[0]}（已归一化）· 下面只显示前 8 维</div>
+      <div class="vec">${v.map(x => `<i style="height:${Math.max(3, Math.abs(x) / absMax * 60)}px;opacity:${x >= 0 ? 1 : .35}"></i>`).join("")}</div>
+      <div class="interp" style="margin-top:6px;font-family:ui-monospace,monospace;font-size:11.5px">[${v.map(x => x.toFixed(4)).join(", ")} …]</div>`;
+  } catch (e) {
+    $("vecOut").innerHTML = `<div class="err">失败：${e.message}</div>`;
+  }
+}
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+loadHealth();
+calcSim();
+</script>
+</body>
+</html>

@@ -1,0 +1,20 @@
+[project]
+name = "project1-ai-chat"
+version = "1.0.0"
+description = "项目 1：AI Chat 完整版（FastAPI + PG + JWT + SSE）"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi[standard]>=0.115",
+    "sqlmodel>=0.0.22",
+    "psycopg[binary]>=3.2",
+    "python-dotenv>=1.0",
+    "email-validator>=2.2",
+    "pyjwt>=2.9",
+    "pwdlib[argon2]>=0.2",
+    "python-multipart>=0.0.18",
+    "openai>=1.60",
+    "httpx>=0.27",
+]
+
+[tool.uv]
+package = false
