@@ -1,0 +1,14 @@
+[project]
+name = "unit13-llm-engineering"
+version = "0.1.0"
+description = "Unit 13：LLM 工程化（超时 / 重试 / 限流 / 成本）"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi[standard]>=0.115",
+    "openai>=1.60",
+    "httpx>=0.27",
+    "python-dotenv>=1.0",
+]
+
+[tool.uv]
+package = false

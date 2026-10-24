@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Unit 12 · 用户系统</title>
+<style>
+  :root{--bg:#f7f7f5;--card:#fff;--line:#e3e2de;--text:#23231f;--dim:#7a7972;--accent:#185FA5;--ok:#0F6E56;--bad:#A32D2D}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font:14px/1.6 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;padding:20px}
+  .wrap{max-width:1080px;margin:0 auto}
+  h1{font-size:19px;font-weight:600}h2{font-size:13px;font-weight:600;color:var(--dim);margin-bottom:10px;letter-spacing:.02em}
+  .sub{color:var(--dim);font-size:13px;margin:4px 0 16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:14px}
+  .cols{display:grid;grid-template-columns:340px 1fr;gap:14px;align-items:start}
+  .row{display:flex;gap:6px;margin-bottom:8px}
+  input,select,textarea{width:100%;padding:6px 9px;border:1px solid var(--line);border-radius:6px;font:inherit;font-size:13px;background:#fff;color:var(--text)}
+  textarea{resize:vertical;min-height:56px}
+  button{padding:6px 12px;border:1px solid var(--line);border-radius:6px;background:#fff;font:inherit;font-size:13px;cursor:pointer;white-space:nowrap;color:var(--text)}
+  button:hover{background:#f0efec}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{background:#0C447C}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .item{padding:8px 10px;border-radius:7px;cursor:pointer;font-size:13px;display:flex;justify-content:space-between;gap:8px}
+  .item:hover{background:#f0efec}
+  .item.active{background:#E6F1FB;color:#0C447C}
+  .item small{color:var(--dim);font-size:11.5px}
+  .msg{padding:8px 11px;border-radius:8px;margin-bottom:7px;font-size:13px;white-space:pre-wrap;word-break:break-word}
+  .msg.user{background:#E6F1FB}.msg.assistant{background:#f0efec}.msg.system{background:#FAEEDA;font-size:12.5px}
+  .msg .meta{font-size:11px;color:var(--dim);margin-bottom:2px}
+  pre{background:#2c2c2a;color:#e8e6df;padding:11px;border-radius:8px;font-size:11.5px;overflow:auto;max-height:200px;line-height:1.5;word-break:break-all;white-space:pre-wrap}
+  .empty{color:var(--dim);font-size:13px;padding:14px 0;text-align:center}
+  .banner{padding:9px 13px;border-radius:8px;font-size:13px;margin-bottom:12px;border:1px solid var(--line);background:var(--card)}
+  .banner.ok{border-color:#9FE1CB;background:#E1F5EE;color:var(--ok)}
+  .banner.bad{border-color:#F7C1C1;background:#FCEBEB;color:var(--bad)}
+  .tag{display:inline-block;padding:1px 7px;border-radius:20px;font-size:11px;background:#f0efec;color:var(--dim)}
+  .hidden{display:none}
+  .kv{font-size:12.5px;color:var(--dim);margin-top:6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Unit 12 · 用户系统</h1>
+  <div class="sub">注册 → 登录拿 JWT → 每次请求带 Bearer token → 只能碰自己的数据</div>
+
+  <div class="banner" id="status">未登录</div>
+
+  <div class="cols">
+    <div>
+      <div class="card" id="authCard">
+        <h2>① 注册 / 登录</h2>
+        <div class="row"><input id="email" placeholder="email" value="demo@example.com"></div>
+        <div class="row"><input id="pass" type="password" placeholder="密码（≥8 位）" value="CorrectHorse2026"></div>
+        <div class="row"><input id="uname" placeholder="显示名（注册用）" value="demo"></div>
+        <div class="row">
+          <button onclick="doRegister()">注册</button>
+          <button class="primary" onclick="doLogin()">登录</button>
+          <button onclick="doLogout()">退出</button>
+        </div>
+        <div class="kv" id="meInfo"></div>
+      </div>
+
+      <div class="card">
+        <h2>② 这个 token 里到底有什么</h2>
+        <div class="kv" style="margin-bottom:8px">JWT 未加密，任何人 base64 都能解 —— 所以别往里面放敏感信息。</div>
+        <pre id="payload">登录后自动解析</pre>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <h2>③ 我的会话</h2>
+        <div class="row">
+          <button class="primary" onclick="createConv()" id="btnNewConv" disabled>新建会话</button>
+          <button onclick="loadConvs()" id="btnRefresh" disabled>刷新</button>
+        </div>
+        <div id="convs"><div class="empty">登录后加载</div></div>
+      </div>
+
+      <div class="card">
+        <h2>④ 消息</h2>
+        <div class="row">
+          <select id="role"><option>user</option><option>assistant</option><option>system</option></select>
+          <button class="primary" onclick="addMsg()" id="btnMsg" disabled>写入</button>
+        </div>
+        <div class="row"><textarea id="content" placeholder="写一条消息…"></textarea></div>
+        <div id="msgs"><div class="empty">先选一个会话</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let token = localStorage.getItem("u12_token") || "";
+let currentConv = null;
+
+function setStatus(text, kind) {
+  const el = $("status");
+  el.className = "banner " + (kind || "");
+  el.textContent = text;
+}
+
+async function api(path, opts = {}) {
+  const headers = Object.assign({}, opts.headers || {});
+  if (token) headers["Authorization"] = "Bearer " + token;
+  if (opts.body && typeof opts.body === "string") headers["Content-Type"] = "application/json";
+  const r = await fetch(path, Object.assign({}, opts, { headers }));
+  if (!r.ok) {
+    let detail = "";
+    try { detail = (await r.json()).detail; } catch (e) { detail = r.status; }
+    const err = new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+    err.status = r.status;
+    throw err;
+  }
+  return r.status === 204 ? null : r.json();
+}
+
+function decodePayload(t) {
+  try {
+    const part = t.split(".")[1];
+    const json = decodeURIComponent(
+      atob(part.replace(/-/g, "+").replace(/_/g, "/"))
+        .split("").map(c => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2)).join("")
+    );
+    return JSON.parse(json);
+  } catch (e) { return null; }
+}
+
+function renderToken() {
+  if (!token) { $("payload").textContent = "登录后自动解析"; return; }
+  const p = decodePayload(token);
+  if (!p) { $("payload").textContent = "无法解析"; return; }
+  const exp = new Date(p.exp * 1000).toLocaleString();
+  $("payload").textContent =
+    JSON.stringify(p, null, 2) + "\n\n过期时间：" + exp + "\n（以上内容没有任何密钥就能读出来）";
+}
+
+function setLoggedIn(on) {
+  $("btnNewConv").disabled = !on;
+  $("btnRefresh").disabled = !on;
+  $("btnMsg").disabled = !on;
+}
+
+async function doRegister() {
+  try {
+    await api("register", {
+      method: "POST",
+      body: JSON.stringify({ email: $("email").value, password: $("pass").value, display_name: $("uname").value })
+    });
+    setStatus("注册成功，现在点登录", "ok");
+  } catch (e) { setStatus("注册失败：" + e.message, "bad"); }
+}
+
+async function doLogin() {
+  const body = new URLSearchParams();
+  body.set("username", $("email").value);
+  body.set("password", $("pass").value);
+  try {
+    const r = await api("login", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: body.toString()
+    });
+    token = r.access_token;
+    localStorage.setItem("u12_token", token);
+    renderToken();
+    await refreshMe();
+    setStatus("已登录 · token 有效期 " + r.expires_in + " 秒", "ok");
+    setLoggedIn(true);
+    loadConvs();
+  } catch (e) { setStatus("登录失败：" + e.message, "bad"); }
+}
+
+function doLogout() {
+  token = "";
+  localStorage.removeItem("u12_token");
+  currentConv = null;
+  setLoggedIn(false);
+  setStatus("已退出（token 已从本地删除）");
+  $("payload").textContent = "登录后自动解析";
+  $("meInfo").textContent = "";
+  $("convs").innerHTML = '<div class="empty">登录后加载</div>';
+  $("msgs").innerHTML = '<div class="empty">先选一个会话</div>';
+}
+
+async function refreshMe() {
+  try {
+    const me = await api("me");
+    $("meInfo").textContent = `当前用户：#${me.id} ${me.email}`;
+  } catch (e) {
+    if (e.status === 401) { doLogout(); setStatus("token 已失效：" + e.message, "bad"); }
+  }
+}
+
+async function loadConvs() {
+  try {
+    const cs = await api("conversations");
+    $("convs").innerHTML = cs.length
+      ? cs.map(c => `<div class="item ${currentConv === c.id ? "active" : ""}" onclick="pickConv(${c.id})">
+          <span>${esc(c.title)}</span><small>#${c.id}</small></div>`).join("")
+      : '<div class="empty">还没有会话</div>';
+  } catch (e) { setStatus("加载会话失败：" + e.message, "bad"); }
+}
+
+function pickConv(id) { currentConv = id; loadConvs(); loadMsgs(); }
+
+async function createConv() {
+  try {
+    await api("conversations", { method: "POST", body: JSON.stringify({ title: "会话 " + new Date().toLocaleTimeString() }) });
+    await loadConvs();
+  } catch (e) { setStatus("建会话失败：" + e.message, "bad"); }
+}
+
+async function loadMsgs() {
+  if (!currentConv) return;
+  try {
+    const ms = await api(`conversations/${currentConv}/messages`);
+    $("msgs").innerHTML = ms.length
+      ? ms.map(m => `<div class="msg ${m.role}"><div class="meta">${m.role} · #${m.id} · ${m.tokens} tok</div>${esc(m.content)}</div>`).join("")
+      : '<div class="empty">这个会话还没有消息</div>';
+  } catch (e) { setStatus("加载消息失败：" + e.message, "bad"); }
+}
+
+async function addMsg() {
+  if (!currentConv) return setStatus("先选一个会话", "bad");
+  const content = $("content").value.trim();
+  if (!content) return;
+  try {
+    await api(`conversations/${currentConv}/messages`, {
+      method: "POST",
+      body: JSON.stringify({ role: $("role").value, content, tokens: content.length })
+    });
+    $("content").value = "";
+    await loadMsgs();
+  } catch (e) { setStatus("写入失败：" + e.message, "bad"); }
+}
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+if (token) {
+  renderToken();
+  refreshMe();
+  setLoggedIn(true);
+  loadConvs();
+}
+</script>
+</body>
+</html>

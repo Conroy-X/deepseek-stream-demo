@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Unit 11 · PostgreSQL 数据面板</title>
+<style>
+  :root{
+    --bg:#f7f7f5; --card:#fff; --line:#e3e2de; --text:#23231f;
+    --dim:#7a7972; --accent:#185FA5; --ok:#0F6E56; --bad:#A32D2D;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font:14px/1.6 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;padding:20px}
+  .wrap{max-width:1180px;margin:0 auto}
+  h1{font-size:19px;font-weight:600;margin-bottom:4px}
+  .sub{color:var(--dim);font-size:13px;margin-bottom:16px}
+  .banner{padding:9px 13px;border-radius:8px;font-size:13px;margin-bottom:14px;border:1px solid var(--line);background:var(--card)}
+  .banner.ok{border-color:#9FE1CB;background:#E1F5EE;color:var(--ok)}
+  .banner.bad{border-color:#F7C1C1;background:#FCEBEB;color:var(--bad)}
+  .cols{display:grid;grid-template-columns:270px 250px 1fr;gap:14px;align-items:start}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:13px}
+  .card h2{font-size:13px;font-weight:600;margin-bottom:10px;color:var(--dim);letter-spacing:.02em}
+  .row{display:flex;gap:6px;margin-bottom:8px}
+  input,select,textarea{width:100%;padding:6px 9px;border:1px solid var(--line);border-radius:6px;font:inherit;font-size:13px;background:#fff;color:var(--text)}
+  textarea{resize:vertical;min-height:64px}
+  button{padding:6px 12px;border:1px solid var(--line);border-radius:6px;background:#fff;font:inherit;font-size:13px;cursor:pointer;white-space:nowrap;color:var(--text)}
+  button:hover{background:#f0efec}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{background:#0C447C}
+  .item{padding:8px 10px;border-radius:7px;cursor:pointer;font-size:13px;display:flex;justify-content:space-between;gap:8px;align-items:center}
+  .item:hover{background:#f0efec}
+  .item.active{background:#E6F1FB;color:#0C447C}
+  .item small{color:var(--dim);font-size:11.5px}
+  .msg{padding:8px 11px;border-radius:8px;margin-bottom:7px;font-size:13px;white-space:pre-wrap;word-break:break-word}
+  .msg.user{background:#E6F1FB}
+  .msg.assistant{background:#f0efec}
+  .msg.system{background:#FAEEDA;font-size:12.5px}
+  .msg .meta{font-size:11px;color:var(--dim);margin-bottom:2px}
+  pre{background:#2c2c2a;color:#e8e6df;padding:12px;border-radius:8px;font-size:12px;overflow:auto;max-height:230px;line-height:1.5}
+  .empty{color:var(--dim);font-size:13px;padding:14px 0;text-align:center}
+  .stat{display:flex;gap:14px;font-size:12px;color:var(--dim);margin-top:8px}
+  .tag{display:inline-block;padding:1px 7px;border-radius:20px;font-size:11px;background:#f0efec;color:var(--dim)}
+  .tag.good{background:#E1F5EE;color:var(--ok)}
+  .tag.bad{background:#FCEBEB;color:var(--bad)}
+  #planCard{margin-top:14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Unit 11 · PostgreSQL 数据面板</h1>
+  <div class="sub">建的每一条数据都真的写进 Postgres —— 重启服务、重启容器，它还在</div>
+
+  <div class="banner" id="health">正在探测数据库…</div>
+
+  <div class="cols">
+    <div class="card">
+      <h2>① 用户</h2>
+      <div class="row">
+        <input id="email" placeholder="email" value="demo@example.com">
+      </div>
+      <div class="row">
+        <input id="uname" placeholder="显示名" value="demo">
+        <button class="primary" onclick="createUser()">建</button>
+      </div>
+      <div id="users"></div>
+    </div>
+
+    <div class="card">
+      <h2>② 会话</h2>
+      <div class="row">
+        <button class="primary" onclick="createConv()" style="width:100%">新建会话</button>
+      </div>
+      <div id="convs"><div class="empty">先在上面建/选一个用户</div></div>
+    </div>
+
+    <div class="card">
+      <h2>③ 消息</h2>
+      <div class="row">
+        <select id="role">
+          <option value="user">user</option>
+          <option value="assistant">assistant</option>
+          <option value="system">system</option>
+        </select>
+        <button class="primary" onclick="addMsg()">写入</button>
+      </div>
+      <div class="row"><textarea id="content" placeholder="写一条消息，回车提交…"></textarea></div>
+      <div id="msgs"><div class="empty">左边选一个会话</div></div>
+    </div>
+  </div>
+
+  <div class="card" id="planCard">
+    <h2>④ 查询计划（验证索引有没有生效）</h2>
+    <div class="row">
+      <button onclick="showPlan()">EXPLAIN ANALYZE</button>
+      <span id="planTag"></span>
+    </div>
+    <pre id="plan">点上面的按钮，看 PG 怎么执行「拉一个会话的消息」</pre>
+  </div>
+</div>
+
+<script>
+let currentUser = null, currentConv = null;
+
+const $ = id => document.getElementById(id);
+
+async function api(path, opts) {
+  const r = await fetch("/" + path.replace(/^\//, ""), opts);
+  if (!r.ok) {
+    const t = await r.text();
+    throw new Error(r.status + " " + t.slice(0, 200));
+  }
+  return r.json();
+}
+
+async function loadHealth() {
+  try {
+    const h = await api("health");
+    const b = $("health");
+    if (h.ok) {
+      b.className = "banner ok";
+      b.textContent = `已连接 · ${h.version} · 库 ${h.database} · 表 ${h.tables.join(", ")}`;
+    } else {
+      b.className = "banner bad";
+      b.textContent = "连不上数据库：" + h.error + " —— 先 docker compose up -d";
+    }
+  } catch (e) {
+    $("health").className = "banner bad";
+    $("health").textContent = "后端没响应：" + e.message;
+  }
+}
+
+async function loadUsers() {
+  const us = await api("users");
+  $("users").innerHTML = us.length
+    ? us.map(u => `<div class="item ${currentUser === u.id ? "active" : ""}" onclick="pickUser(${u.id})">
+        <span>${esc(u.email)}</span><small>#${u.id}</small></div>`).join("")
+    : '<div class="empty">还没有用户</div>';
+}
+
+function pickUser(id) { currentUser = id; currentConv = null; loadUsers(); loadConvs(); $("msgs").innerHTML = '<div class="empty">左边选一个会话</div>'; }
+
+async function createUser() {
+  try {
+    await api("users", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: $("email").value, display_name: $("uname").value })
+    });
+    await loadUsers();
+  } catch (e) { alert("建用户失败：" + e.message); }
+}
+
+async function loadConvs() {
+  if (!currentUser) return;
+  const cs = await api("conversations?user_id=" + currentUser);
+  $("convs").innerHTML = cs.length
+    ? cs.map(c => `<div class="item ${currentConv === c.id ? "active" : ""}" onclick="pickConv(${c.id})">
+        <span>${esc(c.title)}</span><small>#${c.id}</small></div>`).join("")
+    : '<div class="empty">还没有会话</div>';
+}
+
+function pickConv(id) { currentConv = id; loadConvs(); loadMsgs(); }
+
+async function createConv() {
+  if (!currentUser) return alert("先选一个用户");
+  try {
+    await api("conversations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: currentUser, title: "会话 " + new Date().toLocaleTimeString() })
+    });
+    await loadConvs();
+  } catch (e) { alert("建会话失败：" + e.message); }
+}
+
+async function loadMsgs() {
+  if (!currentConv) return;
+  const ms = await api(`conversations/${currentConv}/messages`);
+  $("msgs").innerHTML = ms.length
+    ? ms.map(m => `<div class="msg ${m.role}"><div class="meta">${m.role} · #${m.id} · ${m.tokens} tok</div>${esc(m.content)}</div>`).join("")
+    : '<div class="empty">这个会话还没有消息</div>';
+}
+
+async function addMsg() {
+  if (!currentConv) return alert("先选一个会话");
+  const content = $("content").value.trim();
+  if (!content) return;
+  try {
+    await api(`conversations/${currentConv}/messages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role: $("role").value, content, tokens: content.length })
+    });
+    $("content").value = "";
+    await loadMsgs();
+    await loadConvs();
+  } catch (e) { alert("写入失败：" + e.message); }
+}
+
+async function showPlan() {
+  const id = currentConv || 1;
+  try {
+    const r = await api("debug/explain?conversation_id=" + id);
+    $("plan").textContent = r.plan;
+    $("planTag").innerHTML = r.uses_index
+      ? '<span class="tag good">走了索引 ix_messages_conversation_created</span>'
+      : '<span class="tag bad">没走索引</span>';
+  } catch (e) {
+    $("plan").textContent = "查询失败：" + e.message;
+  }
+}
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+$("content").addEventListener("keydown", e => {
+  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) addMsg();
+});
+
+loadHealth();
+loadUsers();
+</script>
+</body>
+</html>

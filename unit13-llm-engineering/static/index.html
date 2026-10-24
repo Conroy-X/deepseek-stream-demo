@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Unit 13 · LLM 工程化调试台</title>
+<style>
+  :root{--bg:#f7f7f5;--card:#fff;--line:#e3e2de;--text:#23231f;--dim:#7a7972;--accent:#185FA5;--ok:#0F6E56;--bad:#A32D2D;--warn:#854F0B}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font:14px/1.6 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;padding:20px}
+  .wrap{max-width:1060px;margin:0 auto}
+  h1{font-size:19px;font-weight:600}h2{font-size:13px;font-weight:600;color:var(--dim);margin-bottom:10px;letter-spacing:.02em}
+  .sub{color:var(--dim);font-size:13px;margin:4px 0 16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:14px}
+  .cols{display:grid;grid-template-columns:1fr 340px;gap:14px;align-items:start}
+  .row{display:flex;gap:6px;margin-bottom:8px;align-items:center}
+  input,textarea{padding:6px 9px;border:1px solid var(--line);border-radius:6px;font:inherit;font-size:13px;width:100%;background:#fff;color:var(--text)}
+  textarea{resize:vertical;min-height:56px}
+  button{padding:6px 12px;border:1px solid var(--line);border-radius:6px;background:#fff;font:inherit;font-size:13px;cursor:pointer;white-space:nowrap;color:var(--text)}
+  button:hover{background:#f0efec}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{background:#0C447C}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .out{background:#fff;border:1px solid var(--line);border-radius:8px;padding:11px;min-height:120px;white-space:pre-wrap;word-break:break-word;font-size:13.5px}
+  .log{font:11.5px/1.55 ui-monospace,Consolas,monospace;background:#2c2c2a;color:#e8e6df;border-radius:8px;padding:10px;max-height:230px;overflow:auto}
+  .log div{padding:1px 0}
+  .log .r{color:#FAC775}.log .e{color:#F09595}.log .i{color:#85B7EB}.log .g{color:#9FE1CB}
+  .kv{display:flex;justify-content:space-between;font-size:12.5px;padding:4px 0;border-bottom:1px dashed var(--line)}
+  .kv:last-child{border:0}
+  .kv b{font-weight:500}
+  .tag{display:inline-block;padding:1px 7px;border-radius:20px;font-size:11px;background:#f0efec;color:var(--dim)}
+  .banner{padding:9px 13px;border-radius:8px;font-size:13px;margin-bottom:12px;border:1px solid var(--line);background:var(--card)}
+  .banner.ok{border-color:#9FE1CB;background:#E1F5EE;color:var(--ok)}
+  .banner.bad{border-color:#F7C1C1;background:#FCEBEB;color:var(--bad)}
+  .cursor::after{content:"▌";animation:blink 1s steps(1) infinite;color:var(--accent)}
+  @keyframes blink{50%{opacity:0}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Unit 13 · LLM 工程化调试台</h1>
+  <div class="sub">看得到重试、看得到首字延迟、看得到每次调用的 token 与花费</div>
+
+  <div class="banner" id="health">探测中…</div>
+
+  <div class="cols">
+    <div>
+      <div class="card">
+        <h2>对话</h2>
+        <div class="row"><textarea id="q" placeholder="问点什么…">用一句话解释什么是指数退避</textarea></div>
+        <div class="row">
+          <button class="primary" onclick="send(true)">流式发送</button>
+          <button onclick="send(false)">非流式发送</button>
+          <button onclick="loadStats()">刷新账本</button>
+        </div>
+        <div class="out" id="out">（输出会出现在这里）</div>
+      </div>
+
+      <div class="card">
+        <h2>事件日志</h2>
+        <div class="log" id="log"><div class="i">等待请求…</div></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <h2>配置</h2>
+        <div id="cfgs"></div>
+      </div>
+      <div class="card">
+        <h2>本次调用</h2>
+        <div id="lastCall"><span class="tag">还没调用</span></div>
+      </div>
+      <div class="card">
+        <h2>累计账本</h2>
+        <div id="ledger"><span class="tag">加载中</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let buffer = "";
+
+function log(text, cls = "i") {
+  const d = document.createElement("div");
+  d.className = cls;
+  d.textContent = text;
+  $("log").appendChild(d);
+  $("log").scrollTop = $("log").scrollHeight;
+}
+
+function kv(obj, el) {
+  el.innerHTML = Object.entries(obj).map(([k, v]) => `<div class="kv"><span>${k}</span><b>${v}</b></div>`).join("");
+}
+
+async function loadHealth() {
+  try {
+    const h = await (await fetch("health")).json();
+    const b = $("health");
+    b.className = "banner " + (h.key_configured ? "ok" : "bad");
+    b.textContent = h.key_configured
+      ? `配置正常 · ${h.model} · 超时 ${h.timeout_seconds}s · 重试 ${h.max_retries} 次 · 限流 ${h.rate_limit_per_minute}/分钟`
+      : "未配置有效的 DEEPSEEK_API_KEY —— /chat 会返回 503（这本身也是一条要测的降级路径）";
+    kv({
+      "模型": h.model,
+      "Key 已配置": h.key_configured ? "是" : "否",
+      "超时": h.timeout_seconds + "s",
+      "最大重试": h.max_retries,
+      "限流": h.rate_limit_per_minute + " 次/分钟"
+    }, $("cfgs"));
+  } catch (e) {
+    $("health").className = "banner bad";
+    $("health").textContent = "后端没响应：" + e.message;
+  }
+}
+
+async function loadStats() {
+  try {
+    const s = await (await fetch("stats")).json();
+    kv({
+      "总调用": s.total_calls,
+      "总重试": s.total_retries,
+      "输入 token": s.total_prompt_tokens,
+      "输出 token": s.total_completion_tokens,
+      "累计花费": "¥" + s.total_cost_cny
+    }, $("ledger"));
+    if (s.recent.length) {
+      log(`账本已刷新，最近一次：${s.recent[s.recent.length - 1].attempts} 次尝试`, "i");
+    }
+  } catch (e) { log("拉账本失败：" + e.message, "e"); }
+}
+
+async function send(stream) {
+  const q = $("q").value.trim();
+  if (!q) return;
+  $("out").textContent = "";
+  $("out").classList.add("cursor");
+  $("log").innerHTML = "";
+  const t0 = performance.now();
+  let firstAt = null;
+
+  const body = JSON.stringify({
+    messages: [{ role: "user", content: q }],
+    temperature: 0.7,
+    max_tokens: 512
+  });
+
+  try {
+    if (!stream) {
+      log("POST /chat（非流式）", "i");
+      const r = await fetch("chat", { method: "POST", headers: { "Content-Type": "application/json" }, body });
+      const data = await r.json();
+      if (!r.ok) {
+        log(`HTTP ${r.status}：${data.detail}`, "e");
+        $("out").textContent = "请求失败：" + data.detail;
+        return;
+      }
+      $("out").textContent = data.content;
+      showLast(data, performance.now() - t0, null);
+      log(`完成，${data.attempts} 次尝试 / ${data.retries} 次重试`, "g");
+    } else {
+      log("POST /chat/stream（SSE）", "i");
+      const r = await fetch("chat/stream", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body
+      });
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}));
+        log(`HTTP ${r.status}：${d.detail || "请求被拒"}`, "e");
+        $("out").textContent = "请求失败：" + (d.detail || r.status);
+        return;
+      }
+      const reader = r.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, { stream: true });
+          let idx;
+          while ((idx = buf.indexOf("\n\n")) !== -1) {
+            const raw = buf.slice(0, idx);
+            buf = buf.slice(idx + 2);
+            if (!raw.trim()) continue;
+            const payload = raw.split("\n").filter(l => l.startsWith("data:"))
+              .map(l => l.slice(5).trimStart()).join("\n");
+            if (!payload || payload === "[DONE]") continue;
+            const ev = JSON.parse(payload);
+            if (ev.type === "first_token") {
+              firstAt = ev.ttft;
+              log(`首字 ${ev.ttft}s`, "g");
+            } else if (ev.type === "delta") {
+              $("out").textContent += ev.content;
+            } else if (ev.type === "retry") {
+              log(`↻ 重试 #${ev.attempt}（${ev.kind}），退避 ${ev.delay}s`, "r");
+            } else if (ev.type === "error") {
+              log(`错误 ${ev.kind}：${ev.message}`, "e");
+            } else if (ev.type === "done") {
+              showLast(ev, (performance.now() - t0) / 1000, firstAt);
+              log(`完成 · ${ev.attempts} 次尝试 / ${ev.retries} 次重试 · ¥${ev.cost}`, "g");
+            }
+          }
+        }
+      } finally {
+        try { await reader.cancel(); } catch (e) {}
+        reader.releaseLock();
+      }
+    }
+  } catch (e) {
+    log("网络错误：" + e.message, "e");
+  } finally {
+    $("out").classList.remove("cursor");
+    loadStats();
+  }
+}
+
+function showLast(d, elapsed, ttft) {
+  kv({
+    "尝试次数": d.attempts ?? "—",
+    "重试次数": d.retries ?? "—",
+    "输入 token": d.prompt_tokens ?? "—",
+    "输出 token": d.completion_tokens ?? "—",
+    "花费": d.cost != null ? "¥" + d.cost : "—",
+    "总耗时": elapsed ? elapsed.toFixed(2) + "s" : "—",
+    "首字延迟": ttft != null ? ttft + "s" : "—"
+  }, $("lastCall"));
+}
+
+loadHealth();
+loadStats();
+</script>
+</body>
+</html>

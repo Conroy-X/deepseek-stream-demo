@@ -1,0 +1,15 @@
+[project]
+name = "unit11-postgres"
+version = "0.1.0"
+description = "Unit 11：PostgreSQL 三张表（users / conversations / messages）"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi[standard]>=0.115",
+    "sqlmodel>=0.0.22",
+    "psycopg[binary]>=3.2",
+    "python-dotenv>=1.0",
+    "email-validator>=2.2",
+]
+
+[tool.uv]
+package = false
