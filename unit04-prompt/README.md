@@ -4,8 +4,8 @@
 > 预计投入：必做 60 分钟 + 选做 30 分钟。
 
 
-> **关于运行方式**：这些脚本依赖 venv 里的包。
-> 先 `source .venv/bin/activate`，或直接用 `.venv/bin/python xxx.py`。
+> **关于运行方式**：依赖和解释器都交给 uv 管。
+> 依赖没变时直接 `uv run python xxx.py`；改了依赖就跑一次 `uv sync`。
 > 用系统 `python3` 会报 `ModuleNotFoundError`。
 
 ---
@@ -40,22 +40,21 @@
 ## 三、快速开始
 
 ```bash
-# 1) 进目录 + 建环境（复用 Unit 3 的 Python 3.13.5）
+# 1) 进目录 + 同步依赖（.python-version 已钉 3.13，与 Unit 3 一致）
 cd ~/ai-journey/unit04-prompt
-uv venv --python /usr/bin/python3 && source .venv/bin/activate
-uv pip install -r requirements.txt
+uv sync
 
 # 2) 复用 Unit 3 的 Key（不用重新申请）
 cp ../unit03-cli-chat/.env .env
 
 # 3) 离线自检：不花钱，先确认代码逻辑没问题
-python selfcheck.py
+uv run python selfcheck.py
 
 # 4) 先看 Prompt 长什么样（dry-run，不调用 API，不花钱）
-python experiments.py variants --dry-run
+uv run python experiments.py variants --dry-run
 
 # 5) 正式跑（省钱模式：只用 2 条用例）
-python experiments.py variants --cases 2
+uv run python experiments.py variants --cases 2
 ```
 
 ---
@@ -64,11 +63,11 @@ python experiments.py variants --cases 2
 
 | 命令 | 验证什么 | 必做/选做 |
 | --- | --- | --- |
-| `python experiments.py variants --cases 2` | 从"裸问"逐步加角色→约束→格式→示例，**每一步带来多少提升** | 必做 |
-| `python experiments.py fewshot --cases 2` | 0 / 1 / 3 个示例的性价比（合规率 vs 输入 token） | 必做 |
-| `python experiments.py system --cases 2` | 同一份五段式，放 System 和放 User 有没有差别 | 必做 |
-| `python experiments.py temperature --cases 1 --repeat 3` | temperature 升高后输出是否漂移、合规率是否掉 | 选做 |
-| `python code_reviewer.py` | few-shot 锁定输出结构（能解析出几条结构化问题） | 选做 |
+| `uv run python experiments.py variants --cases 2` | 从"裸问"逐步加角色→约束→格式→示例，**每一步带来多少提升** | 必做 |
+| `uv run python experiments.py fewshot --cases 2` | 0 / 1 / 3 个示例的性价比（合规率 vs 输入 token） | 必做 |
+| `uv run python experiments.py system --cases 2` | 同一份五段式，放 System 和放 User 有没有差别 | 必做 |
+| `uv run python experiments.py temperature --cases 1 --repeat 3` | temperature 升高后输出是否漂移、合规率是否掉 | 选做 |
+| `uv run python code_reviewer.py` | few-shot 锁定输出结构（能解析出几条结构化问题） | 选做 |
 
 **7 个变体（`prompts.py`）的设计逻辑**：
 
@@ -131,7 +130,7 @@ v0 裸问 → v1 +角色 → v2 +约束 → v3 +输出格式 → v4 +3示例 →
 | `❌ API Key 无效或已过期（401）` | 先重试一次再判断——Unit 3 验收实测过：同一 Key 会因服务端抖动瞬时 401 |
 | 合规率全是 0% | 检查变体是否真的带上了输出格式段；`--dry-run` 打印 System Prompt 确认 |
 | `uv: command not found` | `export PATH="$HOME/.local/bin:$PATH"` |
-| 想复用 Unit 3 的 venv | 不建议跨目录用；`uv venv` 建本目录的更快更干净 |
+| 想复用 Unit 3 的 venv | 不建议跨目录用；每个单元 `uv sync` 出自己的 `.venv` 更干净 |
 
 ---
 

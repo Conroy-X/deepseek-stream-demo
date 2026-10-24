@@ -1,0 +1,14 @@
+[project]
+name = "unit02-llm-basics"
+version = "0.1.0"
+description = "Unit 2：LLM 基础概念（token / 上下文 / temperature / 流式）"
+requires-python = ">=3.11"
+dependencies = [
+    "openai>=1.60",
+    "python-dotenv>=1.0",
+    "tiktoken>=0.7",
+]
+
+[tool.uv]
+# 这是学习工程（不是要发布的库），uv 不要尝试把自己装成包
+package = false

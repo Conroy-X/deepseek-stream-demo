@@ -20,15 +20,14 @@ HTTP 路由  +  参数校验(Pydantic)  +  异步调用上游  +  流式返回
 ## 二、怎么跑
 
 ```bash
-cd ~/ai-journey/unit01
-uv venv --python /usr/bin/python3 && source .venv/bin/activate
-uv pip install -r requirements.txt
+cd ~/ai-journey/unit01-fastapi
+uv sync                    # 建 .venv + 按 uv.lock 装依赖（幂等，可反复执行）
 
 # 方式一：不启动服务，直接跑路由自检（最快，验证全部逻辑）
-python main.py
+uv run python main.py
 
 # 方式二：起服务，用 /docs 交互式试
-uv run fastapi dev main.py
+uv run fastapi dev
 # 打开 http://127.0.0.1:8000/docs
 ```
 
@@ -64,7 +63,7 @@ uv run fastapi dev main.py
 
 ## 五、完成标准
 
-- [ ] `python main.py` 自检全部 PASS
+- [ ] `uv run python main.py` 自检全部 PASS
 - [ ] 能打开 `/docs`，手动试三个接口（含故意传错参数看 422）
 - [ ] 能解释 422 / 400 / 404 / 500 分别在什么场景用
 - [ ] 能说出为什么 LLM 接口要用 `async def`

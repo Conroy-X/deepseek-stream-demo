@@ -6,11 +6,11 @@
     ③ schema     Prompt 里塞 JSON Schema + 解析后 Pydantic 校验 —— 字段级兜底
 
 用法：
-    python extract.py                    # 默认：内置示例简历 + 三种模式对比
-    python extract.py --mode schema      # 只跑 schema 模式
-    python extract.py --text "简历内容"   # 抽取自定义文本
-    python extract.py --rounds 5         # 连抽 5 次统计通过率（完成标准：10 次至少 9 次）
-    python extract.py --adversarial      # 喂一段非简历文本，看校验怎么拦住（C 段实验）
+    uv run python extract.py             # 默认：内置示例简历 + 三种模式对比
+    uv run python extract.py --mode schema # 只跑 schema 模式
+    uv run python extract.py --text "简历内容" # 抽取自定义文本
+    uv run python extract.py --rounds 5  # 连抽 5 次统计通过率（完成标准：10 次至少 9 次）
+    uv run python extract.py --adversarial # 喂一段非简历文本，看校验怎么拦住（C 段实验）
 """
 
 from __future__ import annotations

@@ -10,9 +10,9 @@ Instructor 到底帮你做了什么 —— 面试被问"用过 Instructor 吗"�
 "手写过它的核心循环，所以我知道它的重试参数该怎么调。"
 
 用法：
-    python retry_extract.py                # 正常简历（大概率一轮就过，看不到重试）
-    python retry_extract.py --dirty        # 内置的"脏简历"（诱导模型输出脏数据看重试）
-    python retry_extract.py --max-retries 3
+    uv run python retry_extract.py         # 正常简历（大概率一轮就过，看不到重试）
+    uv run python retry_extract.py --dirty # 内置的"脏简历"（诱导模型输出脏数据看重试）
+    uv run python retry_extract.py --max-retries 3
 """
 
 from __future__ import annotations

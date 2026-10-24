@@ -5,7 +5,7 @@
     超时重试，都会复用这里的调用逻辑。先封装好，后面只改这一个文件。
 
 运行自检：
-    python llm.py
+    uv run python llm.py
 """
 
 from __future__ import annotations

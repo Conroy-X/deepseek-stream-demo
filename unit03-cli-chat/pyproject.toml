@@ -1,0 +1,14 @@
+[project]
+name = "unit03-cli-chat"
+version = "0.1.0"
+description = "Unit 3：命令式对话 CLI（真实 API、响应头、trace id）"
+requires-python = ">=3.11"
+dependencies = [
+    "openai>=1.60",
+    "python-dotenv>=1.0",
+    "rich>=13.9",
+]
+
+[tool.uv]
+# 这是学习工程（不是要发布的库），uv 不要尝试把自己装成包
+package = false

@@ -4,7 +4,7 @@
 把这份文件读透，就掌握了后面所有单元要用的 FastAPI 底座。
 
 启动：
-    uv run fastapi dev main.py        # 或在 venv 里：.venv/bin/uvicorn main:app --reload
+    uv run fastapi dev                # 或：uv run uvicorn main:app --reload
 
 打开 http://127.0.0.1:8000/docs 边看边试 —— FastAPI 自动生成的 Swagger 是本单元最强的学习工具。
 """

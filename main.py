@@ -1,7 +1,7 @@
 """最小可用的 DeepSeek 流式问答 Demo（单文件，不带多轮对话）。
 
 启动：
-    ./run.sh                          # 或 .venv/bin/uvicorn main:app --port 8001
+    ./run.sh                          # 或 uv run uvicorn main:app --port 8001
 
 调用：
     浏览器  http://localhost:8001/ask?q=用一句话介绍 FastAPI

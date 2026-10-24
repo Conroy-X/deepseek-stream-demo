@@ -1,7 +1,8 @@
 {
     // VS Code 调试配置（WSL Remote 下使用）
     // 打开方式：VS Code 连接到 WSL 后打开 ~/ai-journey 目录，按 F5 选下方配置。
-    // 每个配置都绑定对应 unit 目录的虚拟环境与 .env，不需要手动 source activate。
+    // 每个配置都绑定对应 unit 目录的 .venv（即 uv sync 管理的那个环境）与 .env。
+    // 调试器需要解释器路径，所以这里写 .venv/bin/python；它等价于命令行的 uv run。
     // 排序：Unit 1 → Unit 5；标「不花钱」的不会调用 API。
     "version": "0.2.0",
     "configurations": [

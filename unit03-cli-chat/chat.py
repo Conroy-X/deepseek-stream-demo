@@ -1,10 +1,10 @@
 """Unit 3 · CLI 多轮对话（今天的主产出）。
 
 运行：
-    python chat.py
-    python chat.py --stream                 # 选做：流式输出
-    python chat.py --system "你只说文言文"   # 自定义人设
-    python chat.py --temperature 0          # 更稳定的回答
+    uv run python chat.py
+    uv run python chat.py --stream          # 选做：流式输出
+    uv run python chat.py --system "你只说文言文" # 自定义人设
+    uv run python chat.py --temperature 0   # 更稳定的回答
 
 核心认知：
     LLM 没有记忆。多轮对话 = 每次请求都把「System + 全部历史消息」重新发一遍。

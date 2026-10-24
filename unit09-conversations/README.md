@@ -70,7 +70,7 @@ uv run uvicorn main:app --reload --port 8000
 
 ```bash
 cd ~/ai-journey/unit09-conversations
-python3 -m http.server 3000 -d static
+uv run python -m http.server 3000 -d static
 ```
 
 打开 **http://127.0.0.1:3000/**

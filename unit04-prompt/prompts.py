@@ -10,8 +10,8 @@
     3. VARIANTS            —— 7 个变体，从一个"裸问"逐步加到"五段式全上"
     4. CASES               —— 测试用例（同一个任务的多条输入）
 
-配套使用：python experiments.py variants
-自检：python prompts.py
+配套使用：uv run python experiments.py variants
+自检：uv run python prompts.py
 """
 
 from __future__ import annotations

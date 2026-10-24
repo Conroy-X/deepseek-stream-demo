@@ -9,9 +9,9 @@
     实验 4  API 参数    —— max_tokens / stream 对行为的影响
 
 运行：
-    python demo.py                 # 跑全部（会花几分钱）
-    python demo.py --offline       # 只跑不花钱的部分（token 估算）
-    python demo.py --exp 1         # 只跑某个实验
+    uv run python demo.py          # 跑全部（会花几分钱）
+    uv run python demo.py --offline # 只跑不花钱的部分（token 估算）
+    uv run python demo.py --exp 1  # 只跑某个实验
 """
 
 from __future__ import annotations

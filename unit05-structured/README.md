@@ -4,8 +4,8 @@
 > 昨天的教训延续：光"答对"没用，要**程序能消费**——今天就是把"能解析"升级成"能保证"。
 
 
-> **关于运行方式**：这些脚本依赖 venv 里的包。
-> 先 `source .venv/bin/activate`，或直接用 `.venv/bin/python xxx.py`。
+> **关于运行方式**：依赖和解释器都交给 uv 管。
+> 依赖没变时直接 `uv run python xxx.py`；改了依赖就跑一次 `uv sync`。
 > 用系统 `python3` 会报 `ModuleNotFoundError`。
 
 ---
@@ -37,24 +37,23 @@
 
 ```bash
 cd ~/ai-journey/unit05-structured
-uv venv --python /usr/bin/python3 && source .venv/bin/activate
-uv pip install -r requirements.txt
+uv sync
 cp -n ../unit03-cli-chat/.env .env
 
 # 离线自检：验证 Pydantic 模型与校验逻辑（不花钱）
-python models.py
+uv run python models.py
 
 # 三种模式对比（3 次调用，约 ¥0.005）
-python extract.py
+uv run python extract.py
 
 # 完成标准：10 轮 schema 模式，至少 9 次通过
-python extract.py --mode schema --rounds 10
+uv run python extract.py --mode schema --rounds 10
 
 # 对抗实验（C 段必做）
-python extract.py --adversarial
+uv run python extract.py --adversarial
 
 # 选做：重试闭环
-python retry_extract.py --dirty
+uv run python retry_extract.py --dirty
 ```
 
 ---
@@ -87,7 +86,7 @@ DeepSeek json_mode 的坑（官方文档明说的）：**必须在 Prompt 里显
 
 ## 六、完成标准 ✅（对齐 90 天计划）
 
-- [ ] `python models.py` 自检通过（合法数据过、5 类非法数据被拦）
+- [ ] `uv run python models.py` 自检通过（合法数据过、5 类非法数据被拦）
 - [ ] 10 次抽取至少 9 次通过 Pydantic 校验（`--rounds 10`）
 - [ ] 输出是真正的 `dict`/`Resume` 对象，不是字符串拼的 JSON（`type(r)` 自己看）
 - [ ] 能解释「为什么不能直接 `json.loads` 模型的输出」（用 naive 模式的失败现场回答）
@@ -132,7 +131,7 @@ DeepSeek json_mode 的坑（官方文档明说的）：**必须在 Prompt 里显
 
 ```bash
 # 每次抽取都打印「原始输出 → 解析步骤 → 解析结果」三段
-python extract.py --mode schema --show-raw
+uv run python extract.py --mode schema --show-raw
 
 # 不带 --show-raw 时，解析失败也会自动打印原始输出，方便排错
 ```
@@ -168,7 +167,7 @@ client.meta.saved_path              # 本次存盘位置
 ### 关闭存盘
 
 ```bash
-LLM_SAVE_RAW=0 python extract.py --mode schema
+LLM_SAVE_RAW=0 uv run python extract.py --mode schema
 ```
 
 `logs/` 已在 `.gitignore` 里，不会提交。想留档就挑一份复制到 `docs/`。

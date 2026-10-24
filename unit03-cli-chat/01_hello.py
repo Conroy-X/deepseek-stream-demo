@@ -3,7 +3,7 @@
 先跑通这一个文件，再去看 chat.py。
 
 运行：
-    python 01_hello.py
+    uv run python 01_hello.py
 """
 
 from __future__ import annotations

@@ -4,7 +4,7 @@
 它用假的 openai / dotenv / rich 模块替换真实依赖，然后真的跑一遍命令行交互流程。
 
 运行（WSL 里）：
-    python selfcheck.py
+    uv run python selfcheck.py
 """
 
 from __future__ import annotations

@@ -52,15 +52,17 @@ head_() { printf '\n%s%s%s\n' "$BOLD" "$1" "$RESET"; }
 
 # ---------------------------------------------------------------- 单元表
 # 名称 | 在单元目录里执行的命令 | 期望（只用于展示）
+# 有 pyproject.toml 的单元统一写 __PY__（脚本会展开成 uv run --no-sync python），
+# 与各单元 README 的启动方式保持一致；Node 单元写 __NODE__。
 UNIT_NAMES=(); UNIT_CMDS=(); UNIT_EXPECT=()
 add_unit() {
   UNIT_NAMES+=("$1"); UNIT_CMDS+=("$2"); UNIT_EXPECT+=("$3")
 }
-add_unit unit01-fastapi      ".venv/bin/python main.py"            "18 项"
-add_unit unit02-llm-basics   ".venv/bin/python demo.py --offline"  "离线 token 计数"
-add_unit unit03-cli-chat     ".venv/bin/python selfcheck.py"       "27 项"
-add_unit unit04-prompt       ".venv/bin/python selfcheck.py"       "53 项"
-add_unit unit05-structured   ".venv/bin/python models.py"          "Pydantic 校验演示"
+add_unit unit01-fastapi           "__PY__ main.py"            "18 项"
+add_unit unit02-llm-basics        "__PY__ demo.py --offline"  "离线 token 计数"
+add_unit unit03-cli-chat          "__PY__ selfcheck.py"       "27 项"
+add_unit unit04-prompt            "__PY__ selfcheck.py"       "53 项"
+add_unit unit05-structured        "__PY__ models.py"          "Pydantic 校验演示"
 add_unit unit06-streaming         "__PY__ main.py"            "16 项"
 add_unit unit07-web-chat          "__PY__ main.py"            "15 项"
 add_unit unit08-chat-ui      "__NODE__ test-markdown.mjs"          "32 项"

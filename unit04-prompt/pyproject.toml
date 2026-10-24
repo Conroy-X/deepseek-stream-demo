@@ -1,0 +1,14 @@
+[project]
+name = "unit04-prompt"
+version = "0.1.0"
+description = "Unit 4：Prompt 工程（五段式、变体对比、few-shot）"
+requires-python = ">=3.11"
+dependencies = [
+    "openai>=3.28",
+    "python-dotenv>=1.2",
+    "rich>=15.0",
+]
+
+[tool.uv]
+# 这是学习工程（不是要发布的库），uv 不要尝试把自己装成包
+package = false

@@ -46,7 +46,7 @@ Unit 8 解决：**把 Markdown 渲染成 HTML，并让代码块能看、能复�
 
 ```bash
 cd ~/ai-journey/unit07-web-chat
-.venv/bin/uvicorn main:app --port 8000
+uv run uvicorn main:app --port 8000
 ```
 
 ### 跑本单元的前端
@@ -55,7 +55,8 @@ cd ~/ai-journey/unit07-web-chat
 
 ```bash
 cd ~/ai-journey/unit08-chat-ui
-python3 -m http.server 3000
+uv sync                                    # 本单元没有 Python 依赖，只建环境（幂等）
+uv run python -m http.server 3000 -d static
 ```
 
 然后浏览器打开 **http://127.0.0.1:3000/**
@@ -68,6 +69,9 @@ python3 -m http.server 3000
 ```bash
 npx serve static -p 3000
 ```
+
+> uv 只管 Python；Node 那套（`npx serve` / `node test-markdown.mjs`）仍由 Node 自己跑，
+> 本单元刻意零依赖，不需要 `npm install`。
 
 ### 离线测试解析器（不需要浏览器、不花钱）
 

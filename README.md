@@ -91,22 +91,21 @@ curl -N "http://localhost:8000/ask?q=用一句话介绍 FastAPI"
 # 1. 安装 uv
 curl -LsSf https://astral.sh/uv/install.sh | sh && source ~/.bashrc
 
-# 2. 进入今天的学习目录
+# 2. 进入今天的学习目录（每个单元都是独立的 uv 工程）
 cd ~/ai-journey/unit03-cli-chat
 
-# 3. 建环境装依赖
-uv venv --python 3.12 && source .venv/bin/activate
-uv pip install -r requirements.txt
+# 3. 同步依赖（建 .venv + 按 uv.lock 装，幂等，可反复执行）
+uv sync
 
 # 4. 配置 Key（去 https://platform.deepseek.com/api_keys 申请）
 cp .env.example .env && nano .env
 
 # 5. 离线自检（不花钱，确认代码没问题）
-python selfcheck.py
+uv run python selfcheck.py
 
 # 6. 真机跑起来
-python 01_hello.py
-python chat.py
+uv run python 01_hello.py
+uv run python chat.py
 ```
 
 ---

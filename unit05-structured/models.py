@@ -6,7 +6,7 @@
     3. `model_validate_json()` 一步完成「解析 + 校验」，坏数据在哪一行都告诉你
     4. FastAPI 原生就是 Pydantic（Unit 7 起无缝衔接）
 
-运行自检：python models.py
+运行自检：uv run python models.py
 """
 
 from __future__ import annotations

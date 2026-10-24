@@ -23,19 +23,18 @@
 ## 二、怎么跑
 
 ```bash
-cd ~/ai-journey/unit02
-uv venv --python /usr/bin/python3 && source .venv/bin/activate
-uv pip install -r requirements.txt
+cd ~/ai-journey/unit02-llm-basics
+uv sync                   # 建 .venv + 按 uv.lock 装依赖（幂等）
 
 cp .env.example .env      # 填入 DEEPSEEK_API_KEY
 chmod 600 .env
 
-python demo.py --offline  # 不花钱：只看 token 计数
-python demo.py            # 四个实验全跑（约 ¥0.01）
-python demo.py --exp 2    # 只跑 temperature
+uv run python demo.py --offline  # 不花钱：只看 token 计数
+uv run python demo.py            # 四个实验全跑（约 ¥0.01）
+uv run python demo.py --exp 2    # 只跑 temperature
 ```
 
-> 脚本需要 venv 里的依赖。跑之前先 `source .venv/bin/activate`，或直接用 `.venv/bin/python`。
+> 依赖和解释器都交给 uv：`uv run` 会自动用本目录的 `.venv`，不用手动 `source`。
 
 ---
 
@@ -75,7 +74,7 @@ python demo.py --exp 2    # 只跑 temperature
 
 ## 四、本单元完成标准
 
-- [ ] `python demo.py --offline` 能打出 token 对照表
+- [ ] `uv run python demo.py --offline` 能打出 token 对照表
 - [ ] 四个实验都跑过一遍，知道每个实验在证明什么
 - [ ] 能用自己的话解释「为什么 LLM 没有记忆」
 - [ ] 能说出 `temperature` / `max_tokens` / `stream` 各自影响什么

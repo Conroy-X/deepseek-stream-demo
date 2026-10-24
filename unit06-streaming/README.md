@@ -60,8 +60,7 @@ data: [DONE]
 
 ```bash
 cd ~/ai-journey/unit06-streaming
-uv venv --python /usr/bin/python3
-uv pip install -r requirements.txt
+uv sync
 ```
 
 > 若报 `uv: command not found`，先把 `~/.local/bin` 加进 PATH：
@@ -71,13 +70,11 @@ uv pip install -r requirements.txt
 
 | 方式 | 命令 | 说明 |
 | --- | --- | --- |
-| A 自检 | `python main.py` | **先跑这个**。16 项断言，不调模型、不花钱 |
-| B 直接用 venv | `.venv/bin/python main.py` | 不激活也能跑，最省事 |
-| C 开发模式 | `uv run uvicorn main:app --reload --port 8000` | 改代码自动重载 |
-| D 直接用 venv | `.venv/bin/uvicorn main:app --port 8000` | 最稳，不依赖 uv 在 PATH 里 |
-| E fastapi CLI | `uv run fastapi dev main.py --port 8000` | 带自动重载 + 交互式文档 |
+| A 自检 | `uv run python main.py` | **先跑这个**。16 项断言，不调模型、不花钱 |
+| B 开发模式 | `uv run uvicorn main:app --reload --port 8000` | 改代码自动重载 |
+| C fastapi CLI | `uv run fastapi dev main.py --port 8000` | 带自动重载 + 交互式文档 |
 
-任选 C/D/E 之一启动后：
+任选 B/C 之一启动后：
 
 ```bash
 # 看原始报文（-N 是 --no-buffer，不加看不到流式效果）
@@ -94,8 +91,8 @@ curl -N "http://127.0.0.1:8000/stream/demo?text=hello&delay=0.2"
 | 现象 | 原因 | 解决 |
 | --- | --- | --- |
 | `uv: command not found` | `~/.local/bin` 不在非交互 shell 的 PATH | 先 `export PATH="$HOME/.local/bin:$PATH"` |
-| `ModuleNotFoundError: No module named 'dotenv'` | 用了系统 python3，不是 venv 里的解释器 | 先 `source .venv/bin/activate`，或直接用 `.venv/bin/python main.py` |
-| `please install "fastapi[standard]"` | 装的是裸 `fastapi`，没有 CLI | `uv pip install "fastapi[standard]"`（requirements 已改） |
+| `ModuleNotFoundError: No module named 'dotenv'` | 用了系统 python3，不是 uv 管理的环境 | 用 `uv run python main.py`，不要裸跑 `python3` |
+| `please install "fastapi[standard]"` | 环境里是裸 `fastapi`，没有 CLI | `uv sync`（pyproject 里就是 `fastapi[standard]`） |
 | curl 一次性输出、看不到流式 | 没加 `-N` | `curl -N ...` |
 | 页面空白、404 | 不是访问 `/` 而是别的路径 | 访问 `http://127.0.0.1:8000/` |
 

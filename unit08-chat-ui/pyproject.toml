@@ -1,0 +1,10 @@
+[project]
+name = "unit08-chat-ui"
+version = "0.1.0"
+description = "Unit 8：Chat UI（Markdown 渲染，静态页 + 零依赖解析器）"
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.uv]
+# 这是学习工程（不是要发布的库），uv 不要尝试把自己装成包
+package = false

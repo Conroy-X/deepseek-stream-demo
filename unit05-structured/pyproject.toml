@@ -1,0 +1,15 @@
+[project]
+name = "unit05-structured"
+version = "0.1.0"
+description = "Unit 5：结构化输出（Pydantic 校验、json_mode、重试闭环）"
+requires-python = ">=3.11"
+dependencies = [
+    "openai>=3.28",
+    "python-dotenv>=1.2",
+    "rich>=15.0",
+    "pydantic>=2.9",
+]
+
+[tool.uv]
+# 这是学习工程（不是要发布的库），uv 不要尝试把自己装成包
+package = false

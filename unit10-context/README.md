@@ -96,7 +96,7 @@ uv run uvicorn main:app --port 8000
 前端：
 
 ```bash
-python3 -m http.server 3000 -d static
+uv run python -m http.server 3000 -d static
 ```
 
 打开 **http://127.0.0.1:3000/**

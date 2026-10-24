@@ -81,7 +81,7 @@ uv sync
 cp .env.example .env
 #   - DEEPSEEK_API_KEY 填真实 key
 #   - JWT_SECRET 用下面命令生成
-python -c "import secrets; print(secrets.token_urlsafe(48))"
+uv run python -c "import secrets; print(secrets.token_urlsafe(48))"
 
 # 3. 启动
 uv run uvicorn main:app --reload --port 8000

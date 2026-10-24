@@ -32,15 +32,15 @@ Windows 工作区保留了一份备份：`C:\Users\rik\Documents\deepseek-harnes
 | Python | **3.13.5**（`/usr/bin/python3`） | 别装 3.12：uv 下载 Python 走 GitHub，**本机 GitHub 不通** |
 | uv | 0.12.23（`~/.local/bin/uv`） | PyPI 直连只有 ~8KB/s，必须走镜像 |
 | PyPI 镜像 | **USTC**，写在 `~/.config/uv/uv.toml` | 阿里云镜像索引过期（pydantic 2.14.0 的 wheel 404），Tsinghua 403 |
-| 虚拟环境 | `~/ai-journey/unit03-cli-chat/.venv` | 用 `/usr/bin/python3` 创建，避开 uv 自带的 3.14 shim |
+| 虚拟环境 | `~/ai-journey/unit03-cli-chat/.venv` | 由 `uv sync` 管理；`.python-version` 已钉 3.13，不会命中 3.14 |
 | 依赖版本 | `openai 3.28.0`、`pydantic 2.14.0`、`rich 15.0.0`、`python-dotenv 1.2.4` | 已实测导入成功 |
 
 ### 每次开新终端的固定动作
 
 ```bash
 cd ~/ai-journey/unit03-cli-chat
-source .venv/bin/activate      # 提示符前面会出现 (.venv)
-python selfcheck.py            # 不花钱，确认代码没坏
+uv sync                        # 首次或依赖变动时跑一次
+uv run python selfcheck.py     # 不花钱，确认代码没坏
 ```
 
 ### 配置 API Key（**不要写进代码**）
@@ -68,8 +68,8 @@ chmod 600 .env
 ## 三、先做离线自检（不花一分钱，约 1 分钟）
 
 ```bash
-cd ~/ai-journey/unit03-cli-chat && source .venv/bin/activate
-python selfcheck.py
+cd ~/ai-journey/unit03-cli-chat && uv sync
+uv run python selfcheck.py
 ```
 
 这个脚本用「假的」openai / dotenv / rich 模块替换真实依赖，把 `llm.py` 和 `chat.py`
@@ -84,7 +84,7 @@ python selfcheck.py
 ## 四、跑第一个调用（约 10 分钟）
 
 ```bash
-python 01_hello.py
+uv run python 01_hello.py
 ```
 
 你应该看到类似输出：
@@ -113,7 +113,7 @@ python 01_hello.py
 ## 五、跑多轮对话 CLI（约 40 分钟）
 
 ```bash
-python chat.py
+uv run python chat.py
 ```
 
 ```
@@ -167,9 +167,9 @@ AI > 你叫小明。            ← 证明上下文生效了
 
 ## 七、Unit 3 完成标准（勾完再睡）
 
-- [ ] `python selfcheck.py` 输出「全部通过 ✅」
-- [ ] `python 01_hello.py` 能拿到回答
-- [ ] `python chat.py` 能连续 3 轮对话并记住上文
+- [ ] `uv run python selfcheck.py` 输出「全部通过 ✅」
+- [ ] `uv run python 01_hello.py` 能拿到回答
+- [ ] `uv run python chat.py` 能连续 3 轮对话并记住上文
 - [ ] `/tokens` 能打印输入/输出 token 与估算费用
 - [ ] `/reset` 后模型确实"失忆"
 - [ ] 错误 Key / 断网时给出友好提示，不吐 traceback
@@ -209,7 +209,7 @@ git commit -m "unit03: CLI chat with DeepSeek API (multi-turn + usage + error ha
 | `uv: command not found` | 新终端没读到 PATH：执行 `export PATH="$HOME/.local/bin:$PATH"` |
 | `uv pip install` 卡住或 404 | 镜像问题：检查 `~/.config/uv/uv.toml` 里是 USTC 地址 |
 | `uv python install 3.12` 超时 | 正常：本机 GitHub 不通，用系统 Python 3.13.5 即可 |
-| `python3` 变成 3.14 | 裸 `python3` 命中了 uv 的 shim；用 `.venv/bin/python` 或 `uv venv --python /usr/bin/python3` |
+| `python3` 变成 3.14 | 裸 `python3` 命中了 uv 的 shim；一律用 `uv run python`（本单元 `.python-version` 已钉 3.13） |
 
 **官方排错资料**：[DeepSeek 错误码](https://api-docs.deepseek.com/zh-cn/quick_start/error_codes) ｜ [DeepSeek 限速与隔离](https://api-docs.deepseek.com/zh-cn/quick_start/rate_limit)
 
@@ -249,14 +249,12 @@ git commit -m "unit03: CLI chat with DeepSeek API (multi-turn + usage + error ha
 ### 10.3 debug_response.py 命令行用法
 
 ```bash
-source .venv/bin/activate
-
-python debug_response.py                      # 完整视图（推荐）
-python debug_response.py -p "换个问题"          # 换提问
-python debug_response.py --raw-http           # 额外打印 SDK 的 HTTP 层日志
-python debug_response.py --stream             # 看每个 chunk 的原始 JSON
-python debug_response.py --json-only > r.json # 只要原始 JSON，便于 jq 分析
-python debug_response.py --raw-http 2>&1 | grep -E "POST|HTTP"   # 只看请求行与状态码
+uv run python debug_response.py                      # 完整视图（推荐）
+uv run python debug_response.py -p "换个问题"          # 换提问
+uv run python debug_response.py --raw-http           # 额外打印 SDK 的 HTTP 层日志
+uv run python debug_response.py --stream             # 看每个 chunk 的原始 JSON
+uv run python debug_response.py --json-only > r.json # 只要原始 JSON，便于 jq 分析
+uv run python debug_response.py --raw-http 2>&1 | grep -E "POST|HTTP"   # 只看请求行与状态码
 ```
 
 ### 10.4 实测响应结构（2026-10-14，deepseek-flash）
@@ -390,4 +388,4 @@ curl -sS -D - -o /dev/null -X POST https://api.deepseek.com/chat/completions \
 | 2. `httpx` 在这里不存在 | `import httpx` → `ModuleNotFoundError`（openai 3.28 内部用的是 **httpx2 2.13.1**） | `from httpx2 import Client`；也可 `import openai._base_client as b; b.httpx2` |
 | 3. 别用标准字段名去取 | `x-request-id` 取不到东西 | DeepSeek 的追踪 ID 固定叫 `x-ds-trace-id`，换服务商时先 `print(dict(raw.headers))` 看一眼真实字段名 |
 
-> 已经封装好、可直接跑：`python headers_demo.py`（方式 A + B 实跑，C/D 的完整命令）。
+> 已经封装好、可直接跑：`uv run python headers_demo.py`（方式 A + B 实跑，C/D 的完整命令）。

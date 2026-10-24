@@ -1,0 +1,17 @@
+[project]
+name = "unit01-fastapi"
+version = "0.1.0"
+description = "Unit 1：FastAPI 路由与自检（纯后端基础）"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi[standard]>=0.115",
+    "httpx>=0.27",
+]
+
+[tool.uv]
+# 这是学习工程（不是要发布的库），uv 不要尝试把自己装成包
+package = false
+
+[tool.fastapi]
+# 显式声明 ASGI 应用，fastapi dev / uv run fastapi dev 不用靠自动探测
+entrypoint = "main:app"

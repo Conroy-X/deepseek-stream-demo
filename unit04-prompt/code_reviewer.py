@@ -8,10 +8,10 @@
     这样下游才能稳定解析（Unit 5 的结构化输出就是在这条路上继续走）。
 
 用法：
-    python code_reviewer.py                 # 审查内置的示例代码（有 3 个刻意埋的坑）
-    python code_reviewer.py --file x.py     # 审查指定文件
-    python code_reviewer.py --code "..."    # 直接传代码
-    python code_reviewer.py --show-prompt   # 只看 Prompt（不花钱）
+    uv run python code_reviewer.py          # 审查内置的示例代码（有 3 个刻意埋的坑）
+    uv run python code_reviewer.py --file x.py # 审查指定文件
+    uv run python code_reviewer.py --code "..." # 直接传代码
+    uv run python code_reviewer.py --show-prompt # 只看 Prompt（不花钱）
 """
 
 from __future__ import annotations

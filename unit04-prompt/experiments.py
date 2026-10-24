@@ -1,10 +1,10 @@
 """Unit 4 · Prompt 实验台：同一任务跑多个 Prompt 变体，用**数据**而不是感觉下结论。
 
 四个实验：
-    python experiments.py variants      # 7 个变体对比（必做）
-    python experiments.py fewshot       # 0 / 1 / 3 个示例对比（必做）
-    python experiments.py system        # 指令放 System vs 放 User（必做）
-    python experiments.py temperature   # temperature 对合规率的影响（选做）
+    uv run python experiments.py variants # 7 个变体对比（必做）
+    uv run python experiments.py fewshot # 0 / 1 / 3 个示例对比（必做）
+    uv run python experiments.py system # 指令放 System vs 放 User（必做）
+    uv run python experiments.py temperature # temperature 对合规率的影响（选做）
 
 常用参数：
     --cases 3        只用前 3 条用例（省钱）

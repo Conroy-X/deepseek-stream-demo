@@ -1,7 +1,7 @@
 """Unit 3 附加 · 怎么拿到响应头（x-ds-trace-id 等）—— 四种方式实测对比。
 
 直接运行：
-    python headers_demo.py
+    uv run python headers_demo.py
 
 本文件在 2026-10-14 于本机实测通过（openai 3.28.0 / DeepSeek）。
 """

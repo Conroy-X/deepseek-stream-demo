@@ -2,11 +2,11 @@
 """Unit 3 · 调试脚本：把一次 LLM 调用的「请求 → 原始 HTTP 响应 → 解析字段」全链路打出来。
 
 用法（在 unit03-cli-chat 目录下执行）：
-    python debug_response.py                 # 默认：请求视图 + 原始 JSON body + 字段解释
-    python debug_response.py --raw-http      # 额外打印 SDK 的 HTTP 层日志（POST 行 / 状态码）
-    python debug_response.py --stream        # 用流式调用，看每个 chunk 长什么样
-    python debug_response.py -p "你的问题"    # 换个问题
-    python debug_response.py --json-only     # 只吐原始 JSON（方便重定向到文件）
+    uv run python debug_response.py          # 默认：请求视图 + 原始 JSON body + 字段解释
+    uv run python debug_response.py --raw-http # 额外打印 SDK 的 HTTP 层日志（POST 行 / 状态码）
+    uv run python debug_response.py --stream # 用流式调用，看每个 chunk 长什么样
+    uv run python debug_response.py -p "你的问题" # 换个问题
+    uv run python debug_response.py --json-only # 只吐原始 JSON（方便重定向到文件）
 
 每次运行都会把原始响应写入 logs/last_response.json，方便和历史对比。
 """

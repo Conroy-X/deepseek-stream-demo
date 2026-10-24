@@ -8,7 +8,7 @@
   3. 支持 extra_body 透传 —— Unit 4 要试各种参数，但注意：**未知字段会被服务端静默忽略**
      （实测传 `effort` 非法值也不报错），所以判断参数是否生效只能看 usage 数据。
 
-自检：python llm.py
+自检：uv run python llm.py
 """
 
 from __future__ import annotations
