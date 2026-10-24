@@ -3,7 +3,7 @@
 > 从传统 Web/前端 转向 **AI 应用开发工程师** 的完整学习工程。
 > 主路线：`LLM API → Prompt → RAG → Agent → LangGraph → MCP → AI 工程化 → 项目 → 面试`
 
-**当前进度**：Unit 3 ✅ / Unit 4 ✅ / Unit 5 ✅（按单元推进，不跟日历）｜下一步：Unit 06 Streaming
+**当前进度**：Unit 1–10 代码全部就绪、离线自检全绿（最近机器复跑 2026-10-23）｜下一步：Unit 11 PostgreSQL
 **每日投入**：1–2 小时（在职节奏）
 **主力模型**：DeepSeek `deepseek-flash`（OpenAI 兼容协议）
 
@@ -38,6 +38,7 @@
 ├── project2-knowledge-base/   # ⬜ Unit 15–30  企业知识库（RAG）
 ├── project3-research-agent/   # ⬜ Unit 31–45  Research Agent
 ├── project4-mcp-sql-agent/    # ⬜ Unit 46–60  MCP 数据库 Agent
+├── experiments/               # 🧪 课程外的试用（Search/Fetch API、零依赖）
 └── README.md
 ```
 
@@ -107,6 +108,29 @@ python selfcheck.py
 python 01_hello.py
 python chat.py
 ```
+
+---
+
+## 🩺 一键自检（2026-10-23 新增）
+
+所有单元的自检都是独立的 `.venv` + 独立脚本，以前要跑十次。现在一条命令：
+
+```bash
+cd ~/ai-journey
+bash 00-setup/healthcheck.sh          # 环境 + 10 个单元，全绿才返回 0
+bash 00-setup/healthcheck.sh -v       # 顺带打印失败项的完整输出
+```
+
+它检查两段：
+
+| 段 | 内容 | 缺了会怎样 |
+| --- | --- | --- |
+| 一、环境 | uv / node / `core.hooksPath` / Postgres / pgvector / Redis / Docker / 各单元 `.env` | 只警告，不算失败（Unit 11 之前只有 Postgres 是硬需求） |
+| 二、单元 | unit01–unit10 各自的离线自检 | 任一失败 → 退出码 1 |
+
+**不联网、不调用模型、不花一分钱**；完整输出落在 `logs/`（已 gitignore）。
+
+> 适合当「热身 A 步骤」：每次坐下来先跑一遍，确认上一轮的代码没坏，再开始新单元。
 
 ---
 
