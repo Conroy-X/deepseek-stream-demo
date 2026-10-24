@@ -203,7 +203,9 @@ async def chat_stream(req: ChatRequest, request: Request) -> StreamingResponse:
 
         try:
             if req.strategy == "summarize":
-                trim = await trim_with_llm_summary(raw, budget, yield_status=None)
+                # 函数签名只有 (messages, budget, keep_recent=4)，
+                # 之前多传了 yield_status 会直接 TypeError（自检只测 sliding，没覆盖到）
+                trim = await trim_with_llm_summary(raw, budget)
             else:
                 trim = trim_messages(raw, max_tokens=budget, strategy=req.strategy)
 
@@ -427,6 +429,29 @@ if __name__ == "__main__":
         check("收到 trimmed 事件", '"type": "trimmed"' in body)
         check("缺 Key 时错误走 SSE", '"type": "error"' in body)
     finally:
+        self_mod.API_KEY = saved
+
+    # --- strategy=summarize 也必须走通（回归：多传 yield_status 曾直接 TypeError）---
+    async def fake_summarizer(msgs):  # noqa: ANN001, ANN202
+        return "离线假摘要"
+
+    saved_sum = self_mod.llm_summarizer
+    try:
+        self_mod.llm_summarizer = fake_summarizer   # 摘要也不调模型
+        self_mod.API_KEY = ""                        # 主回答走缺 Key 分支，同样不花钱
+        with client.stream(
+            "POST",
+            "/chat/stream",
+            json={"messages": history, "strategy": "summarize", "max_history_tokens": 800},
+        ) as resp:
+            check("summarize 流式 200", resp.status_code == 200)
+            body2 = "".join(resp.iter_text())
+        check("summarize 不再 TypeError", "TypeError" not in body2, body2[:200])
+        check("summarize 收到 summary 事件", '"type": "summary"' in body2)
+        check("摘要确实来自 summarizer", "离线假摘要" in body2)
+        check("summarize 缺 Key 也走 SSE", '"type": "error"' in body2)
+    finally:
+        self_mod.llm_summarizer = saved_sum
         self_mod.API_KEY = saved
 
     print(f"\n结果：{passed} 通过 / {failed} 失败")
