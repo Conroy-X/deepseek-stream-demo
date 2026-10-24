@@ -9,14 +9,14 @@
     GET  /stats/{cid}   查看某个会话的 token 占用
     GET  /compare       用同一份历史对比三种策略（不调模型）
 
-启动：
-    .venv/bin/uvicorn main:app --reload --port 8000
+启动（uv 托管：自动用本目录的 .venv 与 uv.lock）：
+    uv run uvicorn main:app --reload --port 8000
 
 自检（不花钱）：
-    .venv/bin/python main.py
+    uv run python main.py
 
 测试 context 模块：
-    python test_context.py
+    uv run python test_context.py
 """
 
 from __future__ import annotations

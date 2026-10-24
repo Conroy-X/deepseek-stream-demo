@@ -7,11 +7,11 @@
     Unit 7 前后端**分开部署**（前端 3000 / 后端 8000），必然跨域，
     所以这里必须显式配置 CORSMiddleware —— 这是 90% 的人第一次会卡住的地方。
 
-启动：
-    .venv/bin/uvicorn main:app --reload --port 8000
+启动（uv 托管：自动用本目录的 .venv 与 uv.lock）：
+    uv run uvicorn main:app --reload --port 8000
 
 自检（不调模型）：
-    .venv/bin/python main.py
+    uv run python main.py
 """
 
 from __future__ import annotations

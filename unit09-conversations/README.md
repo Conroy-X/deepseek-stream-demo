@@ -59,12 +59,11 @@ LLM 是**无状态**的，每次请求都要把完整历史重新发一遍。
 
 ```bash
 cd ~/ai-journey/unit09-conversations
-uv venv --python /usr/bin/python3
-uv pip install -r requirements.txt
+uv sync                                     # 建 .venv + 按 uv.lock 装依赖（幂等）
 cp .env.example .env && chmod 600 .env      # 填 Key
 
-.venv/bin/python main.py                    # 自检：20 项，不花钱
-.venv/bin/uvicorn main:app --reload --port 8000
+uv run python main.py                       # 自检：20 项，不花钱
+uv run uvicorn main:app --reload --port 8000
 ```
 
 前端另起一个终端：
@@ -158,7 +157,7 @@ SQLite 适合学习和小工具，**生产要多用户就得上 PostgreSQL**。
 
 ## 七、完成标准
 
-- [ ] `.venv/bin/python main.py` → 20 通过 / 0 失败
+- [ ] `uv run python main.py` → 20 通过 / 0 失败
 - [ ] 能建多个会话，侧边栏正确排序
 - [ ] 连续 10 轮对话，模型始终记得前文
 - [ ] 刷新页面，历史完整还原

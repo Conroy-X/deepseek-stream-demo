@@ -85,13 +85,12 @@ System Prompt            300    0.5%
 
 ```bash
 cd ~/ai-journey/unit10-context
-uv venv --python /usr/bin/python3
-uv pip install -r requirements.txt
+uv sync                         # 建 .venv + 按 uv.lock 装依赖（幂等）
 cp .env.example .env && chmod 600 .env
 
-python test_context.py          # 纯逻辑测试：31 项，不联网
-.venv/bin/python main.py        # 后端自检：16 项
-.venv/bin/uvicorn main:app --port 8000
+uv run python test_context.py   # 纯逻辑测试：31 项，不联网
+uv run python main.py           # 后端自检：16 项
+uv run uvicorn main:app --port 8000
 ```
 
 前端：
@@ -165,8 +164,8 @@ other = 其它字符数 / 4
 
 ## 八、完成标准
 
-- [ ] `python test_context.py` → 31 通过 / 0 失败
-- [ ] `.venv/bin/python main.py` → 16 通过 / 0 失败
+- [ ] `uv run python test_context.py` → 31 通过 / 0 失败
+- [ ] `uv run python main.py` → 16 通过 / 0 失败
 - [ ] 浏览器跑「三策略对比」，能看出三者的省 token 比例差异
 - [ ] 真实对话里依次试 `none` / `sliding` / `summarize`，观察回答质量变化
 - [ ] **能画出自己的上下文预算表**（System / 历史 / 检索 / 输出 各占多少）

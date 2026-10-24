@@ -25,13 +25,12 @@ Unit 7 把前端单独起在 `:3000`，后端在 `:8000`，浏览器会先发 `O
 
 ```bash
 cd ~/ai-journey/unit07-web-chat
-uv venv --python /usr/bin/python3
-uv pip install -r requirements.txt
+uv sync                     # 建 .venv + 按 uv.lock 装依赖（幂等，可反复执行）
 cp .env.example .env        # 填 API Key
 chmod 600 .env
 
-.venv/bin/python main.py                          # 自检（不花钱，15 项）
-.venv/bin/uvicorn main:app --reload --port 8000   # 起服务
+uv run python main.py                            # 自检（不花钱，15 项）
+uv run uvicorn main:app --reload --port 8000     # 起服务
 ```
 
 ### 2. 前端
@@ -139,7 +138,7 @@ unit07-web-chat/
 
 ## 六、完成标准
 
-- [ ] `.venv/bin/python main.py` → 15 通过 / 0 失败
+- [ ] `uv run python main.py` → 15 通过 / 0 失败
 - [ ] 后端起来后，浏览器点「检测 /health」显示「已连通」
 - [ ] 跑「不花钱的链路验证」，文字逐字出现
 - [ ] 发真实问题，回答逐字出现
