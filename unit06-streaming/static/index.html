@@ -118,6 +118,9 @@ async function* parseSSE(response) {
       }
     }
   } finally {
+    // 提前 break 时流还没读完：必须先 cancel() 收掉底层连接，
+    // 只 releaseLock() 会让 Response 体悬挂在那里（锁还了，连接没关）。
+    try { await reader.cancel(); } catch {}
     reader.releaseLock();
   }
 }
@@ -152,7 +155,6 @@ $("btnDemo").onclick = async () => {
     const url = "/stream/demo?delay=0.06&text=" + encodeURIComponent($("demoText").value);
     const resp = await fetch(url);
     if (!resp.ok) throw new Error("HTTP " + resp.status);
-
     for await (const payload of parseSSE(resp)) {
       if (payload === "[DONE]") { pushLog(log, `[DONE] 结束标记`, "t"); break; }
       const ev = JSON.parse(payload);
