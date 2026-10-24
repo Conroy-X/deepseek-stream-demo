@@ -19,6 +19,9 @@
   .side-head { padding:14px 12px; border-bottom:1px solid var(--line); }
   .newbtn { width:100%; background:var(--accent); color:#04121f; border:0;
             border-radius:8px; padding:9px; font-weight:600; cursor:pointer; }
+  /* 没选会话就发消息时，按钮脉冲两下把视线引过去 */
+  .newbtn.pulse { animation:pulse .8s ease-in-out 2; }
+  @keyframes pulse { 50% { transform:scale(1.04); box-shadow:0 0 0 3px rgba(77,159,255,.35); } }
   .convlist { flex:1; overflow-y:auto; padding:8px; }
   .conv { padding:9px 10px; border-radius:7px; cursor:pointer; margin-bottom:4px;
           font-size:13.5px; color:#c3c9d6; display:flex; justify-content:space-between;
@@ -268,9 +271,24 @@ $("btnNew").onclick = async () => {
 };
 
 /* ---------------- 发送 ---------------- */
+/* 没选会话时的提示：不吞输入、不打接口，只把注意力引到「新对话」上 */
+function promptNoConversation() {
+  $("threadInner").innerHTML =
+    '<div class="welcome">还没选会话<br>' +
+    '<span style="font-size:12.5px">先点左侧「＋ 新对话」，你打的内容还在输入框里</span></div>';
+  $("sidebar").classList.add("open");        // 窄屏下把侧栏推出来
+  $("btnNew").classList.add("pulse");
+  setTimeout(() => $("btnNew").classList.remove("pulse"), 1700);
+  $("q").focus();
+}
+
 async function send() {
   const text = $("q").value.trim();
-  if (!text || !currentId || controller) return;
+  if (!text || controller) return;
+
+  // 没有选中会话时，Enter 会绕过 disabled 的「发送」按钮（keydown 里直接调 send），
+  // 所以这里必须显式提示 —— 否则表现就是「输入了、按了回车、什么都没发生」。
+  if (!currentId) { promptNoConversation(); return; }
 
   $("q").value = "";
   $("q").style.height = "auto";
