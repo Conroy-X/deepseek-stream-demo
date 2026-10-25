@@ -71,6 +71,20 @@ curl -X POST http://127.0.0.1:8012/login \
 JSON body 里的 `email` 它根本读不到，于是报"缺 username、缺 password"。
 `"input": null` 也是线索：它连请求体都没解析出来。
 
+**还有一种同样报 422 的情况**：body 明明是表单内容，但**请求头被写成了 `application/json`**。
+前端"只要 body 是字符串就补 JSON 头"的写法很容易踩到（本单元面板 2026-10-25 就这么错过一次）。
+判据在 DevTools 里：**Payload 显示 `username=...&password=...`，但 Request Headers 的
+`Content-Type` 是 `application/json`** —— 内容和声明不一致，服务端按声明解析，自然找不到字段。
+
+正确的做法是「只补默认值，不覆盖调用方显式声明的 Content-Type」：
+
+```js
+const hasContentType = Object.keys(headers).some((k) => k.toLowerCase() === "content-type");
+if (opts.body && typeof opts.body === "string" && !hasContentType) {
+  headers["Content-Type"] = "application/json";
+}
+```
+
 ### 三种正确调用
 
 **① curl 表单**（最常用于脚本）

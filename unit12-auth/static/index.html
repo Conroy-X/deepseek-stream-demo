@@ -104,7 +104,13 @@ function setStatus(text, kind) {
 async function api(path, opts = {}) {
   const headers = Object.assign({}, opts.headers || {});
   if (token) headers["Authorization"] = "Bearer " + token;
-  if (opts.body && typeof opts.body === "string") headers["Content-Type"] = "application/json";
+  // 只补默认值，绝不覆盖调用方显式声明的 Content-Type。
+  // doLogin 发的是表单字符串（body.toString()），之前这行会把它改成 JSON，
+  // 结果服务端按 JSON 解析不到 username/password → 422 "Field required"。
+  const hasContentType = Object.keys(headers).some((k) => k.toLowerCase() === "content-type");
+  if (opts.body && typeof opts.body === "string" && !hasContentType) {
+    headers["Content-Type"] = "application/json";
+  }
   const r = await fetch(path, Object.assign({}, opts, { headers }));
   if (!r.ok) {
     let detail = "";
