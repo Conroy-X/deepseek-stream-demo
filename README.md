@@ -3,7 +3,7 @@
 > 从传统 Web/前端 转向 **AI 应用开发工程师** 的完整学习工程。
 > 主路线：`LLM API → Prompt → RAG → Agent → LangGraph → MCP → AI 工程化 → 项目 → 面试`
 
-**当前进度**：Unit 1–10 代码全部就绪、离线自检全绿（最近机器复跑 2026-10-23）｜下一步：Unit 11 PostgreSQL
+**当前进度**：Unit 1–15 全部完成（2026-10-25 逐单元实跑复核）｜下一步：Unit 16 pgvector
 **每日投入**：1–2 小时（在职节奏）
 **主力模型**：DeepSeek `deepseek-flash`（OpenAI 兼容协议）
 
@@ -30,24 +30,28 @@
 ├── unit04-prompt/             # ✅ Unit 4   Prompt 实验台
 ├── unit05-structured/         # ✅ Unit 5   JSON 结构化输出
 ├── unit06-streaming/          # ✅ Unit 6   流式 / SSE（后端 SSE + 浏览器实验台）
-├── unit07-web-chat/           # 🧰 Unit 7   全栈打通 + CORS
-├── unit08-chat-ui/            # 🧰 Unit 8   Markdown 渲染 + 代码高亮
-├── unit09-conversations/      # 🧰 Unit 9   多轮对话 + SQLite
-├── unit10-context/            # 🧰 Unit 10  上下文管理（三种策略）
-├── project1-ai-chat/          # ⬜ Unit 8–14   AI Chat 完整版
-├── project2-knowledge-base/   # ⬜ Unit 15–30  企业知识库（RAG）
-├── project3-research-agent/   # ⬜ Unit 31–45  Research Agent
-├── project4-mcp-sql-agent/    # ⬜ Unit 46–60  MCP 数据库 Agent
+├── unit07-web-chat/           # ✅ Unit 7   全栈打通 + CORS
+├── unit08-chat-ui/            # ✅ Unit 8   Markdown 渲染 + 代码高亮（前端，无 py）
+├── unit09-conversations/      # ✅ Unit 9   多轮对话 + SQLite
+├── unit10-context/            # ✅ Unit 10  上下文管理（三种策略）
+├── unit11-postgres/           # ✅ Unit 11  PostgreSQL 三张表
+├── unit12-auth/               # ✅ Unit 12  JWT 登录 / 注册 / 权限
+├── unit13-llm-engineering/    # ✅ Unit 13  Timeout / Retry / Rate Limit
+├── unit14-project1/           # ✅ Unit 14  项目 1 收口：AI Chat 完整版
+├── unit15-embedding/          # ✅ Unit 15  Embedding + 余弦相似度 + Top-K
 ├── experiments/               # 🧪 课程外的试用（Search/Fetch API、零依赖）
 └── README.md
 ```
+
+> 四个 project 不再单独建目录：项目 1 收在 `unit14-project1/`，
+> 项目 2（企业知识库 RAG）由 Unit 15–30 逐单元累积而成。
 
 
 ## 🔗 GitHub
 
 | 仓库 | 内容 | 状态 |
 | --- | --- | --- |
-| [Conroy-X/deepseek-stream-demo](https://github.com/Conroy-X/deepseek-stream-demo) | 本工程全部代码：`unit01-fastapi/` ~ `unit05-structured/` 五个学习单元 + 根目录流式 Demo（`main.py`）+ 学习文档（`docs/`） | ✅ 已同步 |
+| [Conroy-X/deepseek-stream-demo](https://github.com/Conroy-X/deepseek-stream-demo) | 本工程全部代码：`unit01-fastapi/` ~ `unit15-embedding/` 十五个学习单元 + 根目录流式 Demo（`main.py`）+ 学习文档（`docs/`） | ✅ 已同步 |
 
 > **`~/ai-journey` 就是本仓库的工作副本**（git 仓库根目录即此处），远端是 `git@github.com:Conroy-X/deepseek-stream-demo.git`。
 > 推送走 **SSH**（`ssh -T git@github.com` 已验证为 `Conroy-X`）；`~/projects/deepseek-stream-demo` 是早期克隆，已与远端同步。
@@ -137,8 +141,8 @@ bash 00-setup/healthcheck.sh -v       # 顺带打印失败项的完整输出
 
 | 阶段 | 天数 | 主题 | 状态 | 产出 |
 | --- | --- | --- | --- | --- |
-| 一 | Unit 3–14 | LLM API + Prompt + 全栈 Chat | 🟡 进行中 | AI Chat 完整版 |
-| 二 | Unit 15–30 | Embedding / pgvector / RAG | ⬜ | 企业知识库 AI |
+| 一 | Unit 3–14 | LLM API + Prompt + 全栈 Chat | ✅ 完成（2026-10-25 复核） | AI Chat 完整版 |
+| 二 | Unit 15–30 | Embedding / pgvector / RAG | 🟡 进行中（15 / 30） | 企业知识库 AI |
 | 三 | Unit 31–45 | Function Calling / LangGraph | ⬜ | Research Agent |
 | 四 | Unit 46–60 | MCP | ⬜ | MCP 数据库 Agent |
 | 五 | Unit 61–75 | AI 工程化 + LLM 原理 | ⬜ | 容器化 + 评测 |
