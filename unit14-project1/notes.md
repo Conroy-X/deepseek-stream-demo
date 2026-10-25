@@ -163,3 +163,54 @@ if conv.title == DEFAULT_TITLE:
 - 对话上下文滑动窗口裁剪，控制成本与延迟
 - 流式落库时序处理：中断可恢复、失败不丢用户消息
 - 全部单元带自检，关键路径可离线验证（不依赖真实模型）
+
+---
+
+## 阅读地图（2026-10-25 补：按 ROI 排，不是按文件顺序）
+
+代码 668 + 226 + 150 + 478 + 337 行，全读一遍会淹。按下面的顺序读，前三档读完 ≈ 300 行，
+已经足够讲清这个项目、也能接住面试追问。
+
+### 第一档 · 必读（约 180 行）
+
+| 位置 | 读什么 | 读完要能答 |
+| --- | --- | --- |
+| `main.py:364-457` | `chat_turn`：五步时序、SSE 事件序列、`finally` 落库 | 用户在生成中点「停止」，数据库最后一行是什么？为什么？ |
+| `main.py:157-185` | `get_current_user` + `_owned` | 为什么每次请求都要查一次库？越权为什么是 404？ |
+| `main.py:223-239` + `security.py:122-142` | 登录（OAuth2 表单）+ `decode_token` | 上游 401 为什么不透传给前端？token 过期和伪造要分开处理吗？ |
+| `static/index.html:120-151` + `244-320` | `api()` 头合并 + `sendMsg()` 里的 SSE 分帧 | 表单请求为什么不能带 `application/json`？为什么用 `\n\n` 切帧？ |
+
+### 第二档 · 值得读（约 120 行，面试高频）
+
+| 位置 | 读什么 |
+| --- | --- |
+| `db.py:167-199` | `ensure_schema`：`create_all` 不会给已有表加列、幂等 ALTER、`NOT NULL` 必须带默认值 |
+| `db.py:128-149` | 连接池四个参数 + `get_session` 作为依赖的生命周期 |
+| `llm_client.py:383-450` | `chat_stream`：首 token 之后不再重试；`GeneratorExit` 分支为什么必须单独 catch |
+| `llm_client.py:262-297` | `normalize_error`（唯一随 SDK 变的地方）+ 指数退避加抖动 |
+| `main.py:336-352` | `build_context`：为什么 `order_by` 要 `(created_at, id)` 双排序 |
+| `main.py:262-292` | `list_conversations`：这里的 N+1 查询，以及"知道自己在写 N+1" |
+
+### 第三档 · 扫一眼就够
+
+- CRUD 样板：`main.py:249-331`（建/删会话、拉消息，模式都一样）
+- 自检 `main.py:483+`：**不看实现，只看断言名字** —— 那是一份「项目承诺了什么」的清单
+- `static/index.html` 的 CSS 与气泡渲染
+
+### 推荐顺序（2-3 小时一次过完）
+
+1. **先读自检的断言名**（`main.py:483+`，20 分钟）——知道这个项目承诺了哪些行为，后面读代码才有靶子
+2. **`chat_turn` 全流程**（45 分钟）——整个项目的主干
+3. **鉴权链路**：`get_current_user` → `login` → `decode_token`（30 分钟）
+4. **数据层与 LLM 层**：`ensure_schema`、连接池、`chat_stream` 两条规则（40 分钟）
+
+### 加分：读"伤疤"比读代码更快
+
+这几处都是这两天真实踩出来又修掉的，`git log -p` 看 diff 比看终态有信息量：
+
+```bash
+git log --oneline -8
+git show 6c7ff74 -- unit14-project1/main.py   # 中断丢半句
+git show 2bf3d3d -- unit14-project1/main.py   # 缺 CORS
+git show 5e81b71 -- unit14-project1/static/index.html  # Content-Type 被覆盖
+```
