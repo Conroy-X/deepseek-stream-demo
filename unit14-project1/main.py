@@ -412,7 +412,14 @@ async def chat_turn(
         error: str | None = None
 
         try:
-            # 先发 start：带上 user_message_id，前端可以立刻对齐它刚画的那个气泡
+            # 帧 1：start —— 把「刚落库的那条用户消息」的 id 告诉前端。
+            # 为什么需要它：前端在发请求之前就乐观渲染了用户气泡（本地对象，没有 id）；
+            # 而服务端在调模型之前已经把这条消息写进了库（① 那一步），有真实主键。
+            # 回传 id 后，前端可以把「屏幕上的气泡」和「库里那一行」对应起来，
+            # 之后的编辑 / 删除 / 引用都能对上号，刷新也不会出现两条一样的。
+            # 现状：index.html 还没消费这个事件 —— 协议先留好，UI 后续再接。
+            # 另外，这里的 user_msg.id 能安全访问，靠的是上面那句 refresh()：
+            # commit 会把属性标记过期，等 Session 关掉后再访问会抛 DetachedInstanceError。
             yield sse({"type": "start", "user_message_id": user_msg.id})
 
             try:
