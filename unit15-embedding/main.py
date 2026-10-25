@@ -7,8 +7,8 @@
     3. 拿它做 Top-K 检索 —— 这就是 RAG 的召回环节
 
 启动：
-    uv run uvicorn main:app --reload --port 8000
-    打开 http://127.0.0.1:8000/
+    uv run uvicorn main:app --reload --port 8015
+    打开 http://127.0.0.1:8015/
 
 自检（默认本地后端，零依赖、不联网、不花钱）：
     uv run python main.py

@@ -7,10 +7,12 @@ RAG 的召回环节。把句子变成向量，用余弦相似度衡量"意思有
 ```bash
 uv sync
 cp .env.example .env       # 默认用本地后端，不需要任何 key
-uv run uvicorn main:app --reload --port 8000
+uv run uvicorn main:app --reload --port 8015
 ```
 
-打开 <http://127.0.0.1:8000/>：左边调相似度，右边看 Top-K 检索和向量长什么样。
+打开 <http://127.0.0.1:8015/>：左边调相似度，右边看 Top-K 检索和向量长什么样。
+
+> 本单元用 **8015**（Unit 11=8011 … Unit 14=8014），和别的单元同时开也不冲突。
 
 ## 自检
 
