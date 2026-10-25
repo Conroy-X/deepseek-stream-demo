@@ -238,6 +238,53 @@ psql -d ai_journey -c "\d messages"                      # 看索引和约束
 
 ### D 段（30 分钟，选做但强烈建议）：让索引生效，并看懂为什么
 
+#### D0. 先搞清楚「怎么看索引」（三条命令，2 分钟）
+
+很多教程一上来就让人读 EXPLAIN，其实先分清三件事最省力：
+
+**① 索引存不存在** —— 看表定义：
+
+```bash
+psql -d ai_journey -c "\d messages"
+```
+
+输出里这一段就是答案：
+
+```
+Indexes:
+    "messages_pkey" PRIMARY KEY, btree (id)
+    "ix_messages_conversation_created" btree (conversation_id, created_at)
+```
+
+有这一行 = 索引建好了。**看到它不代表查询会用它**，这是最容易误解的地方。
+
+**② 有没有被用上** —— 看查询计划（EXPLAIN）：
+
+```bash
+psql -d ai_journey -c "explain analyze
+  select * from messages where conversation_id=1 order by created_at limit 50;"
+```
+
+只看两个词：
+
+| 计划里出现 | 含义 |
+| --- | --- |
+| `Seq Scan on messages` + `Filter: ...` | **没用索引**，全表一行行筛 |
+| `Index Cond: (conversation_id = ...)` | **用上了索引**，直接跳到目标位置 |
+| `Index Scan using ix_messages_conversation_created` | 最理想：既过滤，又自带排序 |
+| `Bitmap Index Scan on ix_...` | 用上了，但只当过滤器，后面还会多一个 `Sort` |
+
+**③ 为什么用/不用** —— 看这三个数：
+
+- `Rows Removed by Filter: N`：白读了多少行（越大越该用索引）；
+- `cost=` 和 `actual time=`：优化器**预估**和**实际**的差距（差很多通常意味着统计信息过期，`ANALYZE` 一下）；
+- 有没有 `Sort` 节点：有，说明没吃到索引的有序性。
+
+> 一句话记法：**`\d` 看有没有建，`EXPLAIN` 看有没有用，`Index Cond` 是"真的用上了"的铁证。**
+
+下面这个实验就是把 ② 的三个状态（全表扫 / bitmap / 索引扫描）亲手走一遍。
+
+
 ```bash
 curl -s "http://127.0.0.1:8011/debug/explain?conversation_id=1"
 ```
