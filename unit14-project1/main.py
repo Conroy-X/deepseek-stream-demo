@@ -169,6 +169,12 @@ def get_current_user(
         user_id = int(payload.get("sub", ""))
     except (TypeError, ValueError):
         raise _unauthorized("token 无效") from None
+    # session.get(User, pk) 发的就是一条主键查询：
+    #   SELECT ... FROM users WHERE users.id = $1
+    # 之所以有时候看起来「没查库」：SQLAlchemy 的 Session 有 identity map
+    # （同一个 Session 里按主键取过的对象会直接命中内存，不再发 SQL）。
+    # 但 FastAPI 每个请求都给一个新 Session（见 db.get_session），
+    # 所以**跨请求永远是一次真实的 SELECT** —— 这正是「禁用账号立刻生效」的代价。
     user = session.get(User, user_id)
     if user is None or not user.is_active:
         raise _unauthorized("用户不存在或已禁用")
