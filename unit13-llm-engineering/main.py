@@ -4,7 +4,7 @@
 核心不在"能调通"，而在"**调不通的时候系统还活着**"。
 
 启动：
-    uv run uvicorn main:app --reload --port 8000
+    uv run uvicorn main:app --reload --port 8013
 
 自检（全离线，用假 transport 模拟各种故障，一分钱不花）：
     uv run python main.py
@@ -99,7 +99,8 @@ class Message(BaseModel):
 class ChatRequest(BaseModel):
     messages: list[Message] = Field(min_length=1)
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
-    max_tokens: int = Field(default=512, ge=1, le=4096)
+    # 推理模型的 reasoning 与正文共用这个预算，512 常被思考吃光 → 正文为空
+    max_tokens: int = Field(default=4096, ge=1, le=4096)
 
 
 def sse(data: dict) -> str:
@@ -150,6 +151,7 @@ def stats() -> dict[str, object]:
 async def chat(req: ChatRequest, request: Request) -> dict[str, object]:
     rate_limit_guard(request)
     client = llm.get_client()
+    st: llm.CallStats | None = None   # 异常路径下也要能引用，别让它未定义
     try:
         content, st = await client.chat(
             [m.model_dump() for m in req.messages],
@@ -163,9 +165,11 @@ async def chat(req: ChatRequest, request: Request) -> dict[str, object]:
     except llm.LLMBadRequestError as exc:
         raise HTTPException(status_code=400, detail=f"请求不合法：{exc}") from exc
     except LLMError as exc:
-        # 到这里说明重试都失败了。对用户来说就是"上游暂时不可用"
+        # 到这里说明重试都失败了。对用户来说就是"上游暂时不可用"。
+        # 注意：不能用 st.retries —— 异常路径下 st 还是 None（这就是之前返回 500 的原因）。
         code = 504 if isinstance(exc, LLMTimeoutError) else 503
-        raise HTTPException(status_code=code, detail=f"上游不可用（已重试 {st.retries} 次）：{exc}") from exc
+        tried = getattr(exc, "attempts", None) or (st.attempts if st else "?")
+        raise HTTPException(status_code=code, detail=f"上游不可用（已尝试 {tried} 次）：{exc}") from exc
     return {"content": content, **st.as_dict()}
 
 
@@ -392,6 +396,30 @@ if __name__ == "__main__":
     r = app_client.post("/chat", json={"messages": [{"role": "user", "content": "hi"}]})
     check("没配 key 时 /chat 返回 503（不是 500 崩溃）", r.status_code == 503, str(r.status_code))
     llm.get_client().config.api_key = saved_key
+
+    # 重试耗尽 → 503 / 超时 → 504（回归：以前这两个分支会因为 st 未定义直接 500）
+    class _BoomClient:
+        async def chat(self, *a, **kw):
+            err = llm.LLMServerError("上游 500")
+            err.attempts = 4
+            raise err
+
+    class _TimeoutClient:
+        async def chat(self, *a, **kw):
+            err = llm.LLMTimeoutError("上游超时")
+            err.attempts = 4
+            raise err
+
+    saved_default = llm._default_client
+    try:
+        llm._default_client = _BoomClient()
+        r = app_client.post("/chat", json={"messages": [{"role": "user", "content": "hi"}]})
+        check("重试耗尽 → 503（不是 500）", r.status_code == 503, str(r.status_code))
+        llm._default_client = _TimeoutClient()
+        r = app_client.post("/chat", json={"messages": [{"role": "user", "content": "hi"}]})
+        check("上游超时 → 504（不是 500）", r.status_code == 504, str(r.status_code))
+    finally:
+        llm._default_client = saved_default
 
     r = app_client.get("/stats")
     check("GET /stats 有累计账本", "total_calls" in r.json() and r.json()["total_calls"] >= 1)

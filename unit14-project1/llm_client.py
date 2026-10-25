@@ -325,7 +325,7 @@ class LLMClient:
         messages: list[dict[str, str]],
         *,
         temperature: float = 0.7,
-        max_tokens: int = 512,
+        max_tokens: int = 4096,
     ) -> tuple[str, CallStats]:
         stats = CallStats()
         started = time.perf_counter()
@@ -371,7 +371,7 @@ class LLMClient:
         messages: list[dict[str, str]],
         *,
         temperature: float = 0.7,
-        max_tokens: int = 512,
+        max_tokens: int = 4096,
     ) -> AsyncIterator[dict[str, Any]]:
         """逐块产出事件字典。
 
@@ -418,6 +418,15 @@ class LLMClient:
                     **stats.as_dict(),
                 }
                 return
+
+            except (GeneratorExit, asyncio.CancelledError):
+                # 客户端断开（点「停止」/ 关页面 / 管道被截断）：
+                # 这不是上游故障，别把 LLMError 记进账本，也别当成重试条件。
+                # 已产生的 token 照常记账，方便算"半截回答也花了多少钱"。
+                stats.elapsed = time.perf_counter() - started
+                stats.cost = self._cost(stats.prompt_tokens, stats.completion_tokens)
+                LEDGER.record(stats, cfg.model)
+                raise
 
             except BaseException as exc:  # noqa: BLE001
                 err = normalize_error(exc)

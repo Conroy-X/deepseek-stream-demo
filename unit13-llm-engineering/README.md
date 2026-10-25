@@ -8,7 +8,7 @@
 ```bash
 uv sync
 cp .env.example .env          # 填真实 key 才能跑 /chat
-uv run uvicorn main:app --reload --port 8000
+uv run uvicorn main:app --reload --port 8013
 ```
 
 ## 自检（全离线，不花钱）
@@ -17,8 +17,9 @@ uv run uvicorn main:app --reload --port 8000
 uv run python main.py
 ```
 
-18 项。用 `httpx.MockTransport` 伪造上游，模拟 429 / 400 / 500 / 超时四种故障，
-验证重试次数、退避、成本计算、令牌桶、以及"没配 key 时返回 503 而不是 500"。
+20 项。用 `httpx.MockTransport` 伪造上游，模拟 429 / 400 / 500 / 超时四种故障，
+验证重试次数、退避、成本计算、令牌桶、以及错误码映射：
+**没配 key → 503、重试耗尽 → 503、上游超时 → 504、上游鉴权失败 → 502**（只有真 bug 才该 500）。
 
 ## 接口
 
@@ -64,8 +65,8 @@ main.py                  ← FastAPI 薄壳 + 自检
 
 ## 验收清单
 
-- [ ] `uv run python main.py` → 18 通过 / 0 失败
-- [ ] `curl localhost:8000/health` 看到 `max_retries: 3`
+- [ ] `uv run python main.py` → 20 通过 / 0 失败
+- [ ] `curl localhost:8013/health` 看到 `max_retries: 3` 与 `key_configured: true`
 - [ ] 把 `.env` 里的 key 改错，`/chat` 返回 **503**（不是 500）
 - [ ] 把 `RATE_LIMIT_PER_MINUTE=2`，连点 3 次得到 **429 + `Retry-After`**
 - [ ] 调一次真实对话后 `/stats` 里 `total_cost_cny` 有值

@@ -84,10 +84,12 @@ cp .env.example .env
 uv run python -c "import secrets; print(secrets.token_urlsafe(48))"
 
 # 3. 启动
-uv run uvicorn main:app --reload --port 8000
+uv run uvicorn main:app --reload --port 8014
 ```
 
-打开 <http://127.0.0.1:8000/>，注册 → 登录 → 新对话 → 开聊。
+打开 <http://127.0.0.1:8014/>，注册 → 登录 → 新对话 → 开聊。
+
+> 本单元用 **8014**（Unit 11=8011、Unit 12=8012、Unit 13=8013），避免端口抢占。
 
 ## 自检
 
@@ -95,18 +97,18 @@ uv run uvicorn main:app --reload --port 8000
 uv run python main.py
 ```
 
-23 项，用假 LLM，**不花钱、不联网**：认证、越权、流式事件、落库顺序、
-自动标题、上下文裁剪、报错降级全部覆盖。
+25 项，用假 LLM，**不花钱、不联网**：认证、越权、流式事件、落库顺序、
+自动标题、上下文裁剪、报错降级，以及「客户端中断后已生成内容仍落库」全部覆盖。
 
 ## 验收清单
 
-- [ ] `uv run python main.py` → 23 通过 / 0 失败
+- [ ] `uv run python main.py` → 25 通过 / 0 失败
 - [ ] 注册登录后能新建对话并逐字收到回复
 - [ ] 刷新页面，历史消息还在
 - [ ] 对话生成中点"停止"或关页面，已生成内容已保存
 - [ ] 换一个账号，看不到前一个账号的会话
 - [ ] 手改 JWT 最后几位，立刻 401 并退回登录页
-- [ ] `curl -H "Authorization: Bearer xxx" localhost:8000/stats` 能看到 token 与花费
+- [ ] `curl localhost:8014/stats` 能看到 token 与花费（`/stats` 不校验身份，只是账本）
 - [ ] 两窗口同时登录不同账号，各自数据互不可见
 
 ## 2 分钟 Demo 录制大纲
@@ -127,7 +129,8 @@ uv run python main.py
 - **JWT 无法主动吊销**：access token 有效期内一直能用。生产要配 refresh token + `jti` 黑名单
 - **限流是单机内存版**：多实例部署会失效，需换 Redis
 - **没有真正的"停止生成"按钮**：前端只是断开连接，后端在 `is_disconnected()` 处 break，
-  模型侧可能仍在计费几秒
+  模型侧可能仍在计费几秒。已生成的内容**会**落库（2026-10-25 修好并加了回归测试），
+  但断开时拿不到最后的 usage chunk，这次调用的 token/花费会记成 0，账本会低估
 - **上下文只做滑动窗口**：会忘掉早期对话，阶段二的 RAG 解决这个问题
 - **无 Alembic**：`ensure_schema()` 是手工幂等迁移，字段一多就该换工具
 

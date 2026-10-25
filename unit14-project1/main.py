@@ -13,8 +13,8 @@
     模型报错时，历史里该留什么？
 
 启动：
-    uv run uvicorn main:app --reload --port 8000
-    打开 http://127.0.0.1:8000/
+    uv run uvicorn main:app --reload --port 8014
+    打开 http://127.0.0.1:8014/
 
 自检（用假 LLM，不花钱）：
     uv run python main.py
@@ -26,6 +26,7 @@ import asyncio
 import json
 import os
 import sys
+import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
@@ -125,7 +126,8 @@ class ConversationCreate(BaseModel):
 class ChatTurn(BaseModel):
     content: str = Field(min_length=1, max_length=8000)
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
-    max_tokens: int = Field(default=512, ge=1, le=4096)
+    # 推理模型的 reasoning 与正文共用这个预算，512 常被思考吃光 → 正文为空
+    max_tokens: int = Field(default=4096, ge=1, le=4096)
 
 
 def _unauthorized(detail: str) -> HTTPException:
@@ -356,46 +358,48 @@ async def chat_turn(
         finished_cleanly = False
         error: str | None = None
 
-        yield sse({"type": "start", "user_message_id": user_msg.id})
-
         try:
-            async for event in llm.get_client().chat_stream(
-                messages,
-                temperature=turn.temperature,
-                max_tokens=turn.max_tokens,
-            ):
-                if event.get("type") == "delta":
-                    parts.append(event["content"])
-                # ② 客户端断开了也继续把已经生成的内容存下来 ——
-                #    用户已经看见了这半句，不存的话下次进来历史是断裂的。
-                if await request.is_disconnected():
-                    break
-                yield sse(event)
-                if event.get("type") == "done":
-                    finished_cleanly = True
-                if event.get("type") == "error":
-                    error = event.get("message", "未知错误")
-        except llm.LLMError as exc:
-            error = str(exc)
-            yield sse({"type": "error", "kind": type(exc).__name__, "message": str(exc)})
+            yield sse({"type": "start", "user_message_id": user_msg.id})
 
-        # ③ 助手消息入库（哪怕只有半句）
-        content = "".join(parts)
-        if content:
-            with Session(store.engine) as s2:
-                s2.add(
-                    Message(
-                        conversation_id=conversation_id,
-                        role="assistant",
-                        content=content,
-                        tokens=len(content),
+            try:
+                async for event in llm.get_client().chat_stream(
+                    messages,
+                    temperature=turn.temperature,
+                    max_tokens=turn.max_tokens,
+                ):
+                    if event.get("type") == "delta":
+                        parts.append(event["content"])
+                    if await request.is_disconnected():
+                        break
+                    yield sse(event)
+                    if event.get("type") == "done":
+                        finished_cleanly = True
+                    if event.get("type") == "error":
+                        error = event.get("message", "未知错误")
+            except llm.LLMError as exc:
+                error = str(exc)
+                yield sse({"type": "error", "kind": type(exc).__name__, "message": str(exc)})
+        finally:
+            # ③ 助手消息入库（哪怕只有半句）。
+            #    必须放在 finally：客户端点「停止」/关页面时，框架会向这个生成器抛
+            #    GeneratorExit，写在循环后面的代码根本不会执行 —— 那样
+            #    "已生成部分自动保存" 就是假的（2026-10-25 实测确实丢了半句话）。
+            content = "".join(parts)
+            if content:
+                with Session(store.engine) as s2:
+                    s2.add(
+                        Message(
+                            conversation_id=conversation_id,
+                            role="assistant",
+                            content=content,
+                            tokens=len(content),
+                        )
                     )
-                )
-                c2 = s2.get(Conversation, conversation_id)
-                if c2:
-                    c2.updated_at = datetime.now(timezone.utc)
-                    s2.add(c2)
-                s2.commit()
+                    c2 = s2.get(Conversation, conversation_id)
+                    if c2:
+                        c2.updated_at = datetime.now(timezone.utc)
+                        s2.add(c2)
+                    s2.commit()
 
         yield sse(
             {
@@ -540,6 +544,33 @@ if __name__ == "__main__":
     r = client.get("/conversations", headers=H)
     title = next(c["title"] for c in r.json() if c["id"] == conv_id)
     check("首条消息自动当标题", title == "你好啊", title)
+
+    # --- 客户端中断：已生成的部分必须落库 ---
+    # 回归：以前落库写在循环后面，客户端断开时框架抛 GeneratorExit，那段代码不执行，
+    # 结果「停止生成」后 assistant 消息一条都不剩（2026-10-25 实测）。
+    r = client.post("/conversations", json={}, headers=H)
+    conv_cut = r.json()["id"]
+    fake_cut = FakeLLM("这是一段会被中途打断的长回答内容")
+    llm._default_client = fake_cut
+    got = 0
+    with client.stream(
+        "POST", f"/conversations/{conv_cut}/chat", json={"content": "讲讲中断"}, headers=H
+    ) as resp:
+        for chunk in resp.iter_text():
+            if '"delta"' in chunk:
+                got += 1
+            if got >= 3:
+                break
+    time.sleep(0.3)
+    msgs_cut = client.get(f"/conversations/{conv_cut}/messages", headers=H).json()
+    asst = [m for m in msgs_cut if m["role"] == "assistant"]
+    saved_len = len(asst[0]["content"]) if asst else 0
+    check("中断后 assistant 仍落库", len(asst) == 1, str([m["role"] for m in msgs_cut]))
+    check(
+        "落库的是已生成的部分（非空且少于全文）",
+        bool(asst) and 0 < saved_len < len(fake_cut.text),
+        f"{saved_len} / {len(fake_cut.text)}",
+    )
 
     # --- 上下文构建 ---
     sent = fake.seen_messages[-1]
