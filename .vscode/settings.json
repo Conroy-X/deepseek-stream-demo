@@ -1,6 +1,11 @@
 {
-    // 工作区级设置：让 VS Code 自动认出 unit03 的虚拟环境
-    "python.defaultInterpreterPath": "${workspaceFolder}/unit03-cli-chat/.venv/bin/python",
+    // 根目录 = 总工程（git 仓库）。这里**不要**钉死解释器：
+    // 各单元依赖不同，钉一个就会让别的单元的 import 全部飘红
+    // （典型症状：Unit 14 里 sqlmodel 报 could not be resolved，dotenv 却正常）。
+    //
+    // 日常正确用法：直接打开某个单元目录
+    //     code ~/ai-journey/unit14-project1
+    // 该目录下的 .vscode/settings.json 会把解释器指向本目录的 .venv。
     "python.terminal.activateEnvironment": true,
     "python.analysis.autoImportCompletions": true,
     "python.analysis.typeCheckingMode": "basic",

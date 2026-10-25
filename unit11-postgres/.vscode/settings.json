@@ -1,0 +1,8 @@
+{
+    // 本单元自己的解释器：Pylance 的类型分析、跳转、签名提示都基于它。
+    // 每个单元依赖不同（Unit 3 没有 sqlmodel，Unit 14 有），所以必须各管各的。
+    "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+    "python.terminal.activateEnvironment": true,
+    "python.analysis.typeCheckingMode": "basic",
+    "python.analysis.autoImportCompletions": true
+}
