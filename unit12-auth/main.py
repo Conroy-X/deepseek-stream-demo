@@ -28,6 +28,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
 from fastapi import Depends, FastAPI, HTTPException, Query, status
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel, EmailStr, Field
@@ -54,6 +55,36 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(title="Unit 12 · 用户系统", version="0.1.0", lifespan=lifespan)
+
+
+# ---------------------------------------------------------------------------
+# CORS：页面和接口不同源时（例如用 http://127.0.0.1:3000 打开静态页、接口在 8012），
+# 浏览器默认会拦掉响应。没有这段，跨域 POST 会表现为
+# 「服务端其实返回 200，但浏览器里是红色失败请求」，极难排查。
+# ---------------------------------------------------------------------------
+ALLOW_ORIGINS = [
+    o.strip()
+    for o in os.getenv(
+        "ALLOW_ORIGINS",
+        "http://127.0.0.1:3000,http://localhost:3000,"
+        "http://127.0.0.1:5500,http://localhost:5500,"
+        "http://127.0.0.1:8080,http://localhost:8080,"
+        "http://127.0.0.1:8011,http://localhost:8011,"
+        "http://127.0.0.1:8012,http://localhost:8012,"
+        "http://127.0.0.1:8013,http://localhost:8013,"
+        "http://127.0.0.1:8014,http://localhost:8014,"
+        "http://127.0.0.1:8015,http://localhost:8015",
+    ).split(",")
+    if o.strip()
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOW_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # auto_error=False：token 缺失时不要由 FastAPI 直接抛 403，
 # 交给我们自己返回带 WWW-Authenticate 头的 401（规范要求）

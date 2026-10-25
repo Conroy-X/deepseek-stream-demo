@@ -115,6 +115,36 @@ curl -s http://127.0.0.1:8012/me -H "Authorization: Bearer $TOKEN"
 
 两个常见 401 原因：忘了 `Bearer ` 前缀（只有 token 不算）、把 token 放进了 query 参数。
 
+### 另一种失败：DevTools 里是红色 X，但服务端其实返回了 200
+
+如果 Network 面板里 `login` 请求图标是红色 ✗、**却能点开 Payload 看到表单内容**，
+说明请求发出去了、服务端也处理了，**是浏览器把响应丢了**——典型原因是跨域（CORS）：
+
+| 现象 | 含义 |
+| --- | --- |
+| 红色 ✗ + 有 Payload + Response 空白 | 响应被浏览器拦掉（缺 `Access-Control-Allow-Origin`） |
+| 有状态码（401/422/500）+ 有 Response | 请求正常往返，是业务/参数问题 |
+
+**怎么确认**：
+
+```bash
+curl -s -D - -o /dev/null -X POST http://127.0.0.1:8012/login \
+  -H 'Origin: http://127.0.0.1:3000' \
+  -H 'Content-Type: application/x-www-form-urlencoded' \
+  --data-urlencode 'username=me@example.com' --data-urlencode 'password=Passw0rd!123' \
+  | grep -i access-control
+```
+
+有 `access-control-allow-origin: ...` = 没跨域问题；没有 = 浏览器一定会拦。
+
+**怎么解决**：
+
+1. **首选**：直接用本服务自己的面板 `http://127.0.0.1:8012/`（同源，不需要 CORS）；
+2. 用别的端口起静态页（如 `uv run python -m http.server 3000 -d static`）时，
+   该端口必须在 `main.py` 的 `ALLOW_ORIGINS` 里（默认已含 3000/5500/5500/8011–8015）。
+
+> 这条坑 Unit 11–15 一开始都没配 CORS，2026-10-25 已统一补上。
+
 ## 和 Unit 11 的区别
 
 `users` 表多了两列，靠 `ensure_schema()` 里的幂等 `ALTER TABLE` 补上：
