@@ -43,6 +43,7 @@ import llm_client as llm
 import security
 from db import Conversation, Message, User, ensure_schema
 
+# 静态页路径按「本文件所在目录」算：uvicorn 的启动目录不一定是这个目录，用相对路径会 404
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_INDEX = os.path.join(BASE_DIR, "static", "index.html")
 
@@ -57,8 +58,11 @@ SYSTEM_PROMPT = (
 )
 
 
+# lifespan：服务启动时跑一次（建表 + 配置自检），关闭时执行 yield 之后那半段（这里没有）。
+# 它是 @app.on_event("startup") 的替代品，后者已弃用。
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    # 建表失败只 warn 不崩：数据库没起时，服务也得能启动，让 /health 把原因报出来
     try:
         applied = ensure_schema()
         if applied:
@@ -101,12 +105,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# OAuth2PasswordBearer 只干一件事：从请求头 Authorization: Bearer <token> 里把 token 抠出来。
+# auto_error=False 表示「没带 token 不立刻报错」，把 None 交给 get_current_user 自己判断，
+# 这样 401 的文案和响应头由我们控制（默认实现会回一句英文 Not authenticated）。
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/login", auto_error=False)
 
 
 # ---------------------------------------------------------------------------
 # 模型
 # ---------------------------------------------------------------------------
+# 请求模型就是接口合同：字段名、类型、长度限制都写在这，校验不过 FastAPI 自动回 422
 class RegisterRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
@@ -130,6 +138,7 @@ class ChatTurn(BaseModel):
     max_tokens: int = Field(default=4096, ge=1, le=4096)
 
 
+# 401 必须带 WWW-Authenticate 头（HTTP 规范要求），否则部分客户端不会弹登录框
 def _unauthorized(detail: str) -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -141,10 +150,15 @@ def _unauthorized(detail: str) -> HTTPException:
 # ---------------------------------------------------------------------------
 # 鉴权
 # ---------------------------------------------------------------------------
+# 鉴权闸门：所有要登录的接口都挂这个依赖。四步：
+#   ① 从请求头取 token  ② 验签并解出 sub（user id）  ③ 查库取 User  ④ 看是否被禁用
+# 第 ③ 步不能省：token 是无状态的，签发之后没法主动作废，
+# 只有每次查库，才能实现「禁用账号立刻生效」。
 def get_current_user(
     token: str | None = Depends(oauth2_scheme),
     session: Session = Depends(store.get_session),
 ) -> User:
+    # 三种失败在这里汇合：没带 token / 验签失败（伪造或过期）/ 用户不存在或被禁用
     if not token:
         raise _unauthorized("未提供 token")
     try:
@@ -161,6 +175,8 @@ def get_current_user(
     return user
 
 
+# 归属校验：会话不存在、会话是别人的，都返回 404。
+# 为什么不返回 403：403 等于告诉攻击者「这个 id 真实存在，只是不给你看」，属于信息泄露。
 def _owned(session: Session, conversation_id: int, user: User) -> Conversation:
     conv = session.get(Conversation, conversation_id)
     if conv is None or conv.user_id != user.id:
@@ -183,6 +199,7 @@ def health() -> dict[str, object]:
     }
 
 
+# 邮箱统一转小写再入库：否则 A@x.com 和 a@x.com 会注册成两个账号，登录时对不上
 @app.post("/register", status_code=201, summary="注册")
 def register(payload: RegisterRequest, session: Session = Depends(store.get_session)) -> dict:
     user = User(
@@ -193,6 +210,7 @@ def register(payload: RegisterRequest, session: Session = Depends(store.get_sess
     session.add(user)
     try:
         session.commit()
+    # 用数据库的唯一约束兜并发：先查再插存在竞态窗口（两个请求同时查到「不存在」）
     except IntegrityError:
         session.rollback()
         raise HTTPException(status_code=409, detail="email 已注册") from None
@@ -200,6 +218,8 @@ def register(payload: RegisterRequest, session: Session = Depends(store.get_sess
     return {"id": user.id, "email": user.email}
 
 
+# 登录用 OAuth2PasswordRequestForm：OAuth2 规范要求表单格式，字段名固定 username / password
+# （email 塞进 username）。用 JSON 调会 422 —— 这是新手最常踩的坑。
 @app.post("/login", response_model=TokenResponse, summary="登录")
 def login(
     form: OAuth2PasswordRequestForm = Depends(),
@@ -207,6 +227,7 @@ def login(
 ) -> TokenResponse:
     email = (form.username or "").strip().lower()
     user = session.exec(select(User).where(User.email == email)).first()
+    # 用户不存在与密码错误返回同一句话：防账号枚举，否则攻击者能逐个探测哪些邮箱注册过
     if user is None or not security.verify_password(form.password, user.password_hash):
         raise _unauthorized("邮箱或密码错误")
     if not user.is_active:
@@ -250,6 +271,8 @@ def list_conversations(
     )
     out = []
     for c in session.exec(stmt).all():
+        # 注意这里是 N+1 查询：列表里每个会话各查一次最后一条消息。
+        # 会话多时应该改成一次 group by 或子查询，别让列表接口退化成 N 次 IO。
         last = session.exec(
             select(Message)
             .where(Message.conversation_id == c.id)
@@ -267,6 +290,7 @@ def list_conversations(
     return out
 
 
+# 只删会话这一行，消息由数据库 ON DELETE CASCADE 带走 —— 应用层不写删消息的代码
 @app.delete("/conversations/{conversation_id}", summary="删会话")
 def delete_conversation(
     conversation_id: int,
@@ -284,6 +308,7 @@ def list_messages(
     conversation_id: int,
     user: User = Depends(get_current_user),
     session: Session = Depends(store.get_session),
+    # limit 设上限 500：防止有人一次拉十万条把内存和服务打满
     limit: int = Query(default=200, ge=1, le=500),
 ) -> list[dict]:
     _owned(session, conversation_id, user)
@@ -333,6 +358,9 @@ def _auto_title(session: Session, conv: Conversation, first_text: str) -> None:
         session.add(conv)
 
 
+# 一次对话的完整时序（本单元的核心难点）：
+#   ① 鉴权 + 归属校验   ② 用户消息先落库   ③ 组装上下文（system + 最近 N 条）
+#   ④ 流式转发给前端     ⑤ 助手消息落库（正常结束 / 报错 / 客户端断开 都要存）
 @app.post("/conversations/{conversation_id}/chat", summary="流式对话（SSE，自动落库）")
 async def chat_turn(
     conversation_id: int,
@@ -351,8 +379,10 @@ async def chat_turn(
     session.commit()
     session.refresh(user_msg)
 
+    # 历史里已经包含刚写入的这条用户消息，所以不要再手动拼一次，否则模型会看到两遍
     messages = [{"role": "system", "content": SYSTEM_PROMPT}] + build_context(session, conv.id)
 
+    # 生成器：每次 yield 都会被 StreamingResponse 立刻 flush 给客户端，这就是「流式」的来源
     async def gen():
         parts: list[str] = []
         finished_cleanly = False
@@ -369,6 +399,7 @@ async def chat_turn(
                 ):
                     if event.get("type") == "delta":
                         parts.append(event["content"])
+                    # 每块都检查客户端还在不在：用户关页面后没必要继续调模型烧 token
                     if await request.is_disconnected():
                         break
                     yield sse(event)
@@ -401,6 +432,7 @@ async def chat_turn(
                         s2.add(c2)
                     s2.commit()
 
+# saved 事件回答前端两个问题：这次存了多少字、是不是被打断的
         yield sse(
             {
                 "type": "saved",
@@ -411,6 +443,8 @@ async def chat_turn(
         )
         yield "data: [DONE]\n\n"
 
+# 三个响应头都是为了「别缓冲」：代理（nginx）默认会攒一批再转发，
+# X-Accel-Buffering: no 是明确告诉 nginx 这个响应要即时透传，否则流式会变成一次性吐出。
     return StreamingResponse(
         gen(),
         media_type="text/event-stream",
@@ -422,15 +456,18 @@ async def chat_turn(
     )
 
 
+# SSE 帧格式固定为 `data: <json>` 加一个空行。少那个空行，前端永远拼不出完整消息
 def sse(data: dict) -> str:
     return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
+# 成本账本存在进程内存里：多 worker / 多实例各算各的，生产要落库才能汇总
 @app.get("/stats", summary="成本账本")
 def stats() -> dict[str, object]:
     return llm.LEDGER.as_dict()
 
 
+# 静态页由后端直接返回 → 页面和接口天然同源，这也是同源时完全不需要 CORS 的原因
 @app.get("/", include_in_schema=False)
 def index():
     if os.path.exists(STATIC_INDEX):
@@ -441,6 +478,8 @@ def index():
 # ---------------------------------------------------------------------------
 # 自检：用假 LLM，不花钱
 # ---------------------------------------------------------------------------
+# 只有 `python main.py` 才会进这里。`uvicorn main:app` 是「导入模块取 app」，
+# 此时 __name__ == "main"，这个 if 不成立 → 自检不跑（所以起服务时不会执行测试）。
 if __name__ == "__main__":
     import uuid
 
@@ -457,6 +496,7 @@ if __name__ == "__main__":
             failed += 1
             print(f"  [FAIL] {name} {detail}")
 
+    # 假 LLM：吐固定文字、不走网络 —— 所以自检不花钱，也不依赖真实 key
     class FakeLLM:
         """替身：记录收到的 messages，按预设脚本吐 delta。"""
 
@@ -491,6 +531,8 @@ if __name__ == "__main__":
         sys.exit(1)
 
     ensure_schema()
+    # TestClient 把请求直接喂给 app（进程内 ASGI），不绑端口
+    # → 自检可以和 8014 上跑着的服务同时进行，互不干扰
     client = TestClient(app)
     tag = uuid.uuid4().hex[:8]
     email = f"p1-{tag}@example.com"

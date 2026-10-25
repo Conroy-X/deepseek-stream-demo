@@ -17,16 +17,20 @@ from datetime import datetime
 from pathlib import Path
 
 from dotenv import load_dotenv
+# SQLAlchemy 的列类型：SQLModel 只是它的语法糖，遇到唯一约束/默认值/时区这类# 复杂需求还得回到 Column 来写
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer, String, Text, func
 from sqlalchemy import text as sa_text
 from sqlmodel import Field, Session, SQLModel, create_engine
 
 load_dotenv(Path(__file__).with_name(".env"))
 
+# 默认连本机 Unix socket（peer 认证，免密）；换 Docker 时只改 .env 里的 DATABASE_URL
 DEFAULT_URL = "postgresql+psycopg://rik@/ai_journey?host=/var/run/postgresql"
 DATABASE_URL = os.getenv("DATABASE_URL", DEFAULT_URL).strip()
 
 
+# class Xxx(SQLModel, table=True)：table=True 表示这是真表，不是普通数据类。
+# 一个 class 同时承担三件事：建表 DDL、查询结果类型、以及 Pydantic 校验。
 class User(SQLModel, table=True):
     __tablename__ = "users"
 
@@ -34,6 +38,7 @@ class User(SQLModel, table=True):
         default=None,
         sa_column=Column(Integer, primary_key=True, autoincrement=True),
     )
+    # 登录名 → 必须 unique + index：唯一约束防重复注册，索引让登录查询走索引
     email: str = Field(
         sa_column=Column(String(255), nullable=False, unique=True, index=True),
     )
@@ -46,6 +51,7 @@ class User(SQLModel, table=True):
         default="",
         sa_column=Column(String(255), nullable=False, server_default=""),
     )
+    # 账号开关：token 还有效、但人已被禁用时，get_current_user 会拦住（见 main.py）
     is_active: bool = Field(
         default=True,
         sa_column=Column(Boolean, nullable=False, server_default=sa_text("true")),
@@ -55,8 +61,10 @@ class User(SQLModel, table=True):
     )
 
 
+# 会话表：user_id 外键 + ON DELETE CASCADE —— 删用户，会话跟着没，由数据库保证
 class Conversation(SQLModel, table=True):
     __tablename__ = "conversations"
+    # 复合索引 (user_id, updated_at)：正好服务「列出我的会话、按最近活跃排序」这个查询。
     __table_args__ = (Index("ix_conversations_user_updated", "user_id", "updated_at"),)
 
     id: int | None = Field(
@@ -70,6 +78,7 @@ class Conversation(SQLModel, table=True):
             nullable=False,
         ),
     )
+    # server_default 让「给老表 ALTER 加列」时有值可填：已有行不知道该填什么时用这个兜底
     title: str = Field(
         default="新对话",
         sa_column=Column(String(200), nullable=False, server_default="新对话"),
@@ -82,6 +91,7 @@ class Conversation(SQLModel, table=True):
     )
 
 
+# 消息表：全库最大的表。conversation_id 外键 + CASCADE，删会话自动清空消息
 class Message(SQLModel, table=True):
     __tablename__ = "messages"
     __table_args__ = (
@@ -101,6 +111,7 @@ class Message(SQLModel, table=True):
     )
     role: str = Field(sa_column=Column(String(16), nullable=False))
     content: str = Field(sa_column=Column(Text, nullable=False))
+    # tokens 这里存的是字符数（廉价估算）；真实计费口径看 llm_client 记账里的 usage
     tokens: int = Field(
         default=0,
         sa_column=Column(Integer, nullable=False, server_default="0"),
@@ -110,6 +121,10 @@ class Message(SQLModel, table=True):
     )
 
 
+# 连接池：整个进程共用一组连接，不是每个请求都新建（建 TCP + 认证很贵）。
+#   pool_pre_ping  借出前先 ping，避开被数据库踢掉的死连接（PG 会主动断空闲连接）
+#   pool_size      常驻连接数；max_overflow 峰值时允许临时多开几个
+#   pool_recycle   连接最长复用 30 分钟，超时回收，防止用到已被服务端关掉的连接
 def make_engine(url: str | None = None, echo: bool = False):
     return create_engine(
         url or DATABASE_URL,
@@ -121,9 +136,12 @@ def make_engine(url: str | None = None, echo: bool = False):
     )
 
 
+# 模块级单例：import 时就建好连接池，全进程共用
 engine = make_engine()
 
 
+# FastAPI 依赖注入用：Depends(store.get_session) 每个请求开一个 Session，
+# 请求结束自动 close（with 退出）。别在模块级共享一个 Session —— 它不保证并发安全。
 def get_session() -> Iterator[Session]:
     with Session(engine) as session:
         yield session
@@ -145,6 +163,7 @@ _MIGRATIONS: list[tuple[str, str]] = [
 ]
 
 
+# create_all() 只建「不存在的表」，不会给已有表加列 —— 这就是必须手写 ALTER 的原因
 def ensure_schema(target_engine=None) -> list[str]:
     """建表 + 补列。返回实际执行过的迁移名，方便自检和日志。
 
@@ -164,6 +183,7 @@ def ensure_schema(target_engine=None) -> list[str]:
         for name, sql in _MIGRATIONS:
             col = name.split(".")[1]
             table = name.split(".")[0]
+            # 先查列在不在，只为了知道「这次真的执行了哪些迁移」（日志和自检要用），不影响 SQL
             exists = conn.execute(
                 sa_text(
                     "SELECT 1 FROM information_schema.columns "
@@ -177,6 +197,7 @@ def ensure_schema(target_engine=None) -> list[str]:
     return applied
 
 
+# /health 用它：连不上就返回 ok:false，而不是抛异常，保证探活接口永远有响应
 def check_connection(target_engine=None) -> dict[str, object]:
     try:
         with (target_engine or engine).connect() as conn:
@@ -196,6 +217,8 @@ def check_connection(target_engine=None) -> dict[str, object]:
         return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
 
 
+# 新消息写入后刷新会话的 updated_at，列表才会按「最近活跃」排序
+# （用冗余字段换查询效率：否则每次列表都要对 messages 做 MAX 子查询）
 def touch_conversation(session: Session, conversation_id: int) -> None:
     conv = session.get(Conversation, conversation_id)
     if conv:

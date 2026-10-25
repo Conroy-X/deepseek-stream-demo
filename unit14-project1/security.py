@@ -27,6 +27,8 @@ load_dotenv(Path(__file__).with_name(".env"))
 # ---------------------------------------------------------------------------
 # 配置
 # ---------------------------------------------------------------------------
+# HS256 是对称签名：同一个密钥既签又验。密钥泄露 = 谁都能伪造任何用户的 token，
+# 所以生产环境必须用足够长的随机串，且不能进 git。
 JWT_SECRET = os.getenv("JWT_SECRET", "").strip()
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
@@ -98,6 +100,8 @@ def create_access_token(
         iat  签发时间
         jti  唯一 id，将来做"主动吊销"时按它进黑名单
     """
+    # 时间一律用 UTC：JWT 的 exp 语义就是 UTC 秒数。写本地时间会整体偏 8 小时，
+    # 表现是「刚签的 token 立刻过期」（东八区）或「早就该过期了还能用」（西半球）。
     now = datetime.now(timezone.utc)
     minutes = expires_minutes if expires_minutes is not None else ACCESS_TOKEN_EXPIRE_MINUTES
     payload: dict[str, Any] = {

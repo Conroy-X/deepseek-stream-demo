@@ -86,6 +86,7 @@ class RateLimited(LLMError):
 # ---------------------------------------------------------------------------
 # 配置
 # ---------------------------------------------------------------------------
+# 配置全部来自环境变量（见 from_env）：调超时/重试次数/单价只改 .env，代码不用动
 @dataclass
 class LLMConfig:
     api_key: str = ""
@@ -115,6 +116,8 @@ class LLMConfig:
         )
 
 
+# 判断 key 是不是占位符（空 / sk-你的 / test 之类）：
+# /health 的 key_configured 与 /chat 返回 503 都依赖这个判断
 def _is_placeholder(key: str) -> bool:
     return (not key) or key.startswith("sk-你的") or key in {"sk-xxx", "test", "changeme"}
 
@@ -189,6 +192,7 @@ class PerUserRateLimiter:
 # ---------------------------------------------------------------------------
 # 统计
 # ---------------------------------------------------------------------------
+# 一次调用的完整账本。注意 attempts 是「总共发了几次」，retries = attempts - 1
 @dataclass
 class CallStats:
     """一次调用的完整账本。"""
@@ -201,6 +205,7 @@ class CallStats:
     completion_tokens: int = 0
     cost: float = 0.0
 
+# 给前端和日志用：cost 保留 8 位小数，因为单次调用常常只有 1e-05 量级
     def as_dict(self) -> dict[str, Any]:
         return {
             "attempts": self.attempts,
@@ -213,6 +218,8 @@ class CallStats:
         }
 
 
+# 进程级累计账本：/stats 直接读它。重启清零、多实例各算各的 —— 这是已知限制，
+# 生产要落到表里才能跨进程汇总
 class CostLedger:
     """进程级累计账本。生产上应该落库/上报，这里内存版用于演示与自检。"""
 
@@ -243,12 +250,15 @@ class CostLedger:
         }
 
 
+# 全局单例：main.py 里通过 llm.LEDGER 读取
 LEDGER = CostLedger()
 
 
 # ---------------------------------------------------------------------------
 # 异常归一
 # ---------------------------------------------------------------------------
+# 整个模块唯一需要跟着 SDK 版本改的地方：把 openai 的异常翻成自家 6 种类型，
+# 每种自带 retryable。上层只认 retryable，不再关心 SDK 抛了什么
 def normalize_error(exc: BaseException) -> LLMError:
     """把 SDK 抛的各种异常翻译成我们自己的类型 + 是否可重试。
 
@@ -280,6 +290,7 @@ def normalize_error(exc: BaseException) -> LLMError:
     return LLMError(f"{type(exc).__name__}: {exc}", retryable=False)
 
 
+# 退避 = base × 2^attempt（封顶 cap），再乘一个 [0,1] 随机数（full jitter）
 def backoff_delay(attempt: int, base: float, cap: float) -> float:
     """指数退避 + 抖动（full jitter）。
 
@@ -301,6 +312,8 @@ class LLMClient:
         self._client: AsyncOpenAI | None = None
         self._client_key: str | None = None
 
+# 懒加载客户端：第一次真要用时才建（自检不配 key 也能跑）
+# key 变了会重建，所以改完 .env 热重载即可生效
     def client(self) -> AsyncOpenAI:
         cfg = self.config
         if _is_placeholder(cfg.api_key):
@@ -308,6 +321,7 @@ class LLMClient:
                 "缺少有效的 DEEPSEEK_API_KEY，请在 .env 里配置（cp .env.example .env）",
                 retryable=False,
             )
+        # 也顺便关掉 SDK 自带重试（max_retries=0），否则外层 3 次 × SDK 3 次 = 9 个请求
         if self._client is None or self._client_key != cfg.api_key:
             self._client = AsyncOpenAI(
                 api_key=cfg.api_key,
