@@ -6,8 +6,11 @@
 
 启动：
     docker compose up -d                      # 起库（第一次会初始化数据库）
-    uv run uvicorn main:app --reload --port 8000
-    打开 http://127.0.0.1:8000/ 看数据面板
+    uv run uvicorn main:app --reload --port 8011
+    打开 http://127.0.0.1:8011/ 看数据面板
+
+注意端口：本单元用 8011，不要用 8000 —— 8000 是 Unit 7/9/10 的默认端口，
+同时开会报 [Errno 98] address already in use。
 
 自检（不需要 LLM，不需要 API Key，只需要库在跑）：
     uv run python main.py
@@ -28,6 +31,7 @@ from datetime import datetime, timezone
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, EmailStr, Field
+from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, select
 
@@ -184,10 +188,21 @@ def list_messages(
 @app.get("/debug/explain", summary="看查询计划，确认索引生效")
 def debug_explain(conversation_id: int = 1) -> dict[str, object]:
     plan = store.explain_message_query(conversation_id=conversation_id)
+    # 索引被用上有三种写法，都要认：
+    #   Index Scan using ...        /  Bitmap Index Scan on ...  /  Index Only Scan using ...
+    # 只匹配 "Index Scan using" 会漏掉 bitmap —— 数据量中等时最常出现的恰好是它。
+    scan_type = "其他"
+    for name in ("Index Only Scan", "Bitmap Index Scan", "Index Scan", "Seq Scan"):
+        if name in plan:
+            scan_type = name
+            break
     return {
         "plan": plan,
+        "scan_type": scan_type,
         "uses_index": "ix_messages_conversation_created" in plan,
         "seq_scan": "Seq Scan" in plan,
+        # Bitmap 路径用上了索引，但拿不到索引的有序性，计划里仍会多一次 Sort
+        "needs_sort": "Sort Key" in plan,
     }
 
 
@@ -263,9 +278,24 @@ if __name__ == "__main__":
     check("tokens 落库正确", sum(m["tokens"] for m in msgs) == 60)
 
     # --- 索引与查询计划 ---
-    check("(conversation_id, created_at) 索引生效", client.get(
-        f"/debug/explain?conversation_id={conv_id}"
-    ).json()["uses_index"])
+    # 只有几行数据时，优化器算下来全表扫更便宜，走 Seq Scan 是**正常现象**，不是索引建错。
+    # 真实场景是"一个会话聊了几百上千条"，所以造一个长会话再断言。
+    big = client.post("/conversations", json={"user_id": user_id, "title": "长会话"}).json()["id"]
+    with Session(store.engine) as sf:
+        sf.add_all(
+            [Message(conversation_id=big, role="user", content=f"填充 {i}") for i in range(1000)]
+        )
+        sf.commit()
+        # 关键一步：统计信息不新，优化器会继续按"小表"估成本、仍选 Seq Scan。
+        # 生产里 bulk insert 之后要 ANALYZE（或等 autovacuum 自己跑），否则索引形同虚设。
+        sf.execute(text("ANALYZE messages"))
+        sf.commit()
+    info = client.get(f"/debug/explain?conversation_id={big}").json()
+    check(
+        "(conversation_id, created_at) 索引在长会话上生效",
+        info["uses_index"],
+        f"scan_type={info.get('scan_type')} needs_sort={info.get('needs_sort')}",
+    )
 
     # --- 持久化：换一个全新 Session 还能读到（模拟"换个进程"）---
     engine2 = store.make_engine()
