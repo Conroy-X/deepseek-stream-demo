@@ -4,9 +4,12 @@
 变成"每个人只能碰自己的数据"。
 
 启动：
-    uv run uvicorn main:app --reload --port 8000
-    打开 http://127.0.0.1:8000/           注册登录面板
-    打开 http://127.0.0.1:8000/docs       点右上角 Authorize 亲手验一次
+    uv run uvicorn main:app --reload --port 8012
+    打开 http://127.0.0.1:8012/           注册登录面板
+    打开 http://127.0.0.1:8012/docs       点右上角 Authorize 亲手验一次
+
+登录接口是 OAuth2 表单（字段 username/password，Content-Type 为 form），
+不是 JSON —— 用 JSON 调会报 422 "username/password Field required"。
 
 自检（不调模型、不花钱，需要库在跑）：
     uv run python main.py

@@ -8,11 +8,13 @@
 ```bash
 uv sync
 cp .env.example .env          # 数据库连接沿用 Unit 11
-uv run uvicorn main:app --reload --port 8000
+uv run uvicorn main:app --reload --port 8012
 ```
 
-- <http://127.0.0.1:8000/> 注册登录面板（右侧会实时解析 JWT payload）
-- <http://127.0.0.1:8000/docs> 点右上角 **Authorize**，用 email + 密码登录后再试接口
+- <http://127.0.0.1:8012/> 注册登录面板（右侧会实时解析 JWT payload）
+- <http://127.0.0.1:8012/docs> 点右上角 **Authorize**，用 email + 密码登录后再试接口
+
+> 本单元用 **8012**（Unit 11 是 8011，Unit 9/10 是 8000），避免端口抢占。
 
 ## 自检
 
@@ -38,6 +40,80 @@ uv run python main.py
 | GET | `/debug/token?token=` | — | 教学用：不验签直接看 payload |
 
 鉴权方式：`Authorization: Bearer <access_token>`
+
+## 调用 `/login` 的三种正确姿势（以及 422 排错）
+
+### 症状
+
+```bash
+curl -X POST http://127.0.0.1:8012/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"me@example.com","password":"Passw0rd!123"}'
+```
+
+返回：
+
+```json
+{"detail":[
+  {"type":"missing","loc":["body","username"],"msg":"Field required","input":null},
+  {"type":"missing","loc":["body","password"],"msg":"Field required","input":null}
+]}
+```
+
+### 为什么会这样
+
+`/login` 用的是 FastAPI 的 `OAuth2PasswordRequestForm`，它按 **OAuth2 密码模式**的规定取两个**表单字段**：
+
+- `Content-Type` 必须是 `application/x-www-form-urlencoded`，**不是 JSON**；
+- 字段名固定叫 `username` / `password`，**不能叫 `email`**；
+- 值上把 **email 塞进 `username`**。
+
+JSON body 里的 `email` 它根本读不到，于是报"缺 username、缺 password"。
+`"input": null` 也是线索：它连请求体都没解析出来。
+
+### 三种正确调用
+
+**① curl 表单**（最常用于脚本）
+
+```bash
+curl -s -X POST http://127.0.0.1:8012/login \
+  -H 'Content-Type: application/x-www-form-urlencoded' \
+  --data-urlencode 'username=me@example.com' \
+  --data-urlencode 'password=Passw0rd!123'
+```
+
+期望：`200` + `{"access_token":"eyJ...","token_type":"bearer", ...}`
+
+**② Swagger UI**：打开 `/docs` → 右上角 **Authorize** → 填 email + 密码 → 之后点每个接口自动带 token。
+
+**③ 自带面板**：`http://127.0.0.1:8012/` 的登录按钮（它内部发的就是表单）。
+
+### 对照：`/register` 反而是 JSON
+
+同一个服务里两种格式，最容易记混：
+
+| 接口 | 请求格式 | 字段名 |
+| --- | --- | --- |
+| POST `/register` | JSON | `email` / `password` / `display_name` |
+| POST `/login` | 表单 | `username`（填 email） / `password` |
+
+记法：**登录走 OAuth2 规范 = 表单；注册是自家接口 = JSON。**
+`OAuth2PasswordRequestForm` 不是 FastAPI 的怪癖，是它在遵守标准，
+所以任何 OAuth2 客户端（Swagger、Postman 的 OAuth2 面板）都要求同样的格式。
+
+### 拿 token 调其它接口
+
+```bash
+TOKEN=$(curl -s -X POST http://127.0.0.1:8012/login \
+  -H 'Content-Type: application/x-www-form-urlencoded' \
+  --data-urlencode 'username=me@example.com' \
+  --data-urlencode 'password=Passw0rd!123' \
+  | python3 -c 'import sys,json;print(json.load(sys.stdin)["access_token"])')
+
+curl -s http://127.0.0.1:8012/me -H "Authorization: Bearer $TOKEN"
+```
+
+两个常见 401 原因：忘了 `Bearer ` 前缀（只有 token 不算）、把 token 放进了 query 参数。
 
 ## 和 Unit 11 的区别
 
