@@ -176,10 +176,14 @@ def ensure_schema(target_engine=None) -> list[str]:
     （现有行不知道该填什么）。这是加列最经典的坑。
     """
     eng = target_engine or engine
+    # 第一步：新环境一次建全（表已存在则跳过，不会重复建）
     SQLModel.metadata.create_all(eng)
 
+    # applied 只用来回答「这次真做了什么」，给日志和自检断言用
     applied: list[str] = []
+    # 所有 ALTER 放同一个事务：要么全成功、要么全回滚，不会留下半迁移状态
     with eng.begin() as conn:
+        # name 形如 users.password_hash，拆开是为了去 information_schema 里查
         for name, sql in _MIGRATIONS:
             col = name.split(".")[1]
             table = name.split(".")[0]
@@ -191,7 +195,9 @@ def ensure_schema(target_engine=None) -> list[str]:
                 ),
                 {"t": table, "c": col},
             ).first()
+            # 不管列在不在都执行 —— SQL 里自带 IF NOT EXISTS，天然幂等，可以反复跑
             conn.execute(sa_text(sql))
+            # 执行前不存在、执行后才有的，才算「这次补上的列」
             if not exists:
                 applied.append(name)
     return applied

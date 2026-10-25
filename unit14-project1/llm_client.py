@@ -393,14 +393,18 @@ class LLMClient:
         因为此时前端已经显示了一半内容，你再重发一遍，用户会看到重复的文字。
         所以这里的策略是"只在拿到第一个 token 前重试"。
         """
+        # 整次调用共用一个 stats：重试多次也只记一条账，attempts 会累加
         cfg = self.config
         started = time.perf_counter()
         stats = CallStats()
 
+        # 最多试 max_retries + 1 次（首次 + 3 次重试 = 4 次机会）
         for attempt in range(cfg.max_retries + 1):
             stats.attempts = attempt + 1
+            # 每轮重试都重置：新一轮要从「还没出字」重新判断能不能重试
             got_first = False
             try:
+                # include_usage 是关键：否则流末尾不会推 usage chunk，成本永远算不出来
                 stream = await self.client().chat.completions.create(
                     model=cfg.model,
                     messages=messages,  # type: ignore[arg-type]
@@ -409,20 +413,27 @@ class LLMClient:
                     stream=True,
                     stream_options={"include_usage": True},
                 )
+                # 边收边记账：usage 通常出现在最后一个 chunk（那时 choices 是空的）
                 async for chunk in stream:
                     if chunk.usage:
                         stats.prompt_tokens = chunk.usage.prompt_tokens
                         stats.completion_tokens = chunk.usage.completion_tokens
+                    # 只带 usage、没有 choices 的 chunk，直接跳过
                     if not chunk.choices:
                         continue
+                    # 推理模型注意：思考内容在 delta.reasoning_content，不在 content。
+                    # 这里只认 content —— 所以「思考把预算吃光」时，一个 delta 都不会有
                     delta = chunk.choices[0].delta.content
                     if not delta:
                         continue
+                    # 第一个正文 token 才算「出字」：TTFT 从这一刻往回算
                     if not got_first:
                         got_first = True
                         yield {"type": "first_token", "ttft": round(time.perf_counter() - started, 3)}
+                    # 只产出增量文本；拼接是上层的事（后端拼了就没法边收边显示）
                     yield {"type": "delta", "content": delta}
 
+                # 正常收尾：usage 已拿到 → 算钱 → 记账 → 发 done → return
                 stats.elapsed = time.perf_counter() - started
                 stats.cost = self._cost(stats.prompt_tokens, stats.completion_tokens)
                 LEDGER.record(stats, cfg.model)
@@ -433,6 +444,7 @@ class LLMClient:
                 }
                 return
 
+            # 客户端断开：按「部分成功」记账后原样抛出，绝不重试
             except (GeneratorExit, asyncio.CancelledError):
                 # 客户端断开（点「停止」/ 关页面 / 管道被截断）：
                 # 这不是上游故障，别把 LLMError 记进账本，也别当成重试条件。
@@ -445,6 +457,7 @@ class LLMClient:
             except BaseException as exc:  # noqa: BLE001
                 err = normalize_error(exc)
                 stats.error_kinds.append(type(err).__name__)
+                # 三种情况停止重试：已经出过字 / 错误本身不可重试 / 次数已用尽
                 if got_first or not err.retryable or attempt >= cfg.max_retries:
                     stats.elapsed = time.perf_counter() - started
                     LEDGER.record(stats, cfg.model)

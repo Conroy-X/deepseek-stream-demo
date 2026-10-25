@@ -369,26 +369,32 @@ async def chat_turn(
     user: User = Depends(get_current_user),
     session: Session = Depends(store.get_session),
 ) -> StreamingResponse:
+    # 步骤 0：这个会话必须是当前用户的；不是就 404（越权判断统一在 _owned 里）
     conv = _owned(session, conversation_id, user)
 
     # ① 用户消息**先入库**。即使马上被限流或模型报错，用户说过的话也要留痕，
     #    否则刷新页面这条消息就凭空消失了，用户会以为是自己没发出去。
+    # tokens 记 0：计费大头在输出侧，用户输入的 token 不在这里精确统计
     user_msg = Message(conversation_id=conv.id, role="user", content=turn.content, tokens=0)
     session.add(user_msg)
     _auto_title(session, conv, turn.content)
     session.commit()
     session.refresh(user_msg)
+    # refresh 之后 id 已回填，生成器里才能安全地用 user_msg.id
 
     # 历史里已经包含刚写入的这条用户消息，所以不要再手动拼一次，否则模型会看到两遍
     messages = [{"role": "system", "content": SYSTEM_PROMPT}] + build_context(session, conv.id)
 
     # 生成器：每次 yield 都会被 StreamingResponse 立刻 flush 给客户端，这就是「流式」的来源
     async def gen():
+        # parts 累积正文 —— 它是唯一能保证「断开也存得下半句」的来源，别指望回头从事件里拼
         parts: list[str] = []
+        # finished_cleanly：是否收到过 done 事件，用来区分「正常结束」和「被中途打断」
         finished_cleanly = False
         error: str | None = None
 
         try:
+            # 先发 start：带上 user_message_id，前端可以立刻对齐它刚画的那个气泡
             yield sse({"type": "start", "user_message_id": user_msg.id})
 
             try:
@@ -397,26 +403,33 @@ async def chat_turn(
                     temperature=turn.temperature,
                     max_tokens=turn.max_tokens,
                 ):
+                    # 只把 delta 收进 parts；first_token / retry / usage 不参与落库
                     if event.get("type") == "delta":
                         parts.append(event["content"])
                     # 每块都检查客户端还在不在：用户关页面后没必要继续调模型烧 token
                     if await request.is_disconnected():
                         break
+                    # 原样转发：事件协议由 llm_client 定义，这一层只负责搬运
                     yield sse(event)
+                    # done 里带 usage 和 cost，收到它才算这次真的跑完
                     if event.get("type") == "done":
                         finished_cleanly = True
                     if event.get("type") == "error":
                         error = event.get("message", "未知错误")
+            # LLMError = 重试也救不回来的那类（配置错 / 鉴权失败 / 参数错）
             except llm.LLMError as exc:
                 error = str(exc)
                 yield sse({"type": "error", "kind": type(exc).__name__, "message": str(exc)})
+        # finally 是这段代码的核心保险：正常结束、报错、客户端断开，三种结局都会走到这里
         finally:
             # ③ 助手消息入库（哪怕只有半句）。
             #    必须放在 finally：客户端点「停止」/关页面时，框架会向这个生成器抛
             #    GeneratorExit，写在循环后面的代码根本不会执行 —— 那样
             #    "已生成部分自动保存" 就是假的（2026-10-25 实测确实丢了半句话）。
+            # 只有真产出过内容才写：空白 assistant 消息会把历史弄脏（自检里有一条专门查这个）
             content = "".join(parts)
             if content:
+            # 另开一个 Session：请求级 session 可能在流还没结束时就已经关闭
                 with Session(store.engine) as s2:
                     s2.add(
                         Message(
@@ -426,13 +439,14 @@ async def chat_turn(
                             tokens=len(content),
                         )
                     )
+            # 顺手刷新会话 updated_at，列表才会按最近活跃排序
                     c2 = s2.get(Conversation, conversation_id)
                     if c2:
                         c2.updated_at = datetime.now(timezone.utc)
                         s2.add(c2)
                     s2.commit()
 
-# saved 事件回答前端两个问题：这次存了多少字、是不是被打断的
+        # saved 事件回答前端两个问题：这次存了多少字、是不是被打断的
         yield sse(
             {
                 "type": "saved",
@@ -441,9 +455,10 @@ async def chat_turn(
                 "error": error,
             }
         )
+        # [DONE] 是 SSE 的结束标记，前端看到它就可以收手，不用等连接自然关闭
         yield "data: [DONE]\n\n"
 
-# 三个响应头都是为了「别缓冲」：代理（nginx）默认会攒一批再转发，
+    # 三个响应头都是为了「别缓冲」：代理（nginx）默认会攒一批再转发，
 # X-Accel-Buffering: no 是明确告诉 nginx 这个响应要即时透传，否则流式会变成一次性吐出。
     return StreamingResponse(
         gen(),
