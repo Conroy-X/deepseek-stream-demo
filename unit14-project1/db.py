@@ -140,9 +140,36 @@ def make_engine(url: str | None = None, echo: bool = False):
 engine = make_engine()
 
 
+# ---------------------------------------------------------------------------
+# Session 是什么（本单元几乎每个数据库操作都经过它）
+# ---------------------------------------------------------------------------
+# 一句话：Session = 一次「工作单元」+ 一级缓存 + 事务边界。
+# 它不是连接 —— 连接由 engine 的连接池管着，Session 借一个、用完还回去。
+#
+# 生命周期：一次请求一个（见下面的 get_session），请求结束就 close。
+#   · 不要在模块级共享一个 Session：并发不安全，还会把对象泄漏给别的请求
+#   · 不要跨线程/跨协程传递它
+#
+# 方法速查（下面每个都在 main.py 里真实用到）：
+#   session.add(obj)            登记为「新增」，此刻不发 SQL
+#   session.delete(obj)         登记为「删除」，commit 时才发 DELETE
+#   session.get(Model, pk)      按主键取：先查 identity map，没有才 SELECT
+#   session.exec(select(...))   执行查询；.first() / .all() 取结果
+#   session.commit()            真正写库 + 结束事务；成功后对象属性会过期
+#   session.rollback()          回滚。异常之后必须调用，否则这个 Session 不可用
+#   session.refresh(obj)        立刻重读这一行，把过期属性刷成数据库真实值
+#   session.close()             释放连接（with 退出时自动执行）
+#
+# 两个必须知道的默认行为：
+#   ① 事务「隐式开始」：第一次查询/写入就开启事务，直到 commit/rollback 结束。
+#      所以别在一个 Session 里先查一堆东西、再去调模型 —— 连接会被长时间占住。
+#   ② commit 之后 expire_on_commit=True：对象属性全部过期（__dict__ 被清空），
+#      下次访问会**再发一条 SELECT** 重新加载。refresh() 只是把这次加载提前、显式化。
 # FastAPI 依赖注入用：Depends(store.get_session) 每个请求开一个 Session，
 # 请求结束自动 close（with 退出）。别在模块级共享一个 Session —— 它不保证并发安全。
 def get_session() -> Iterator[Session]:
+    # with 退出时自动 close()：连接还回池子、identity map 丢掉、未提交事务回滚。
+    # yield 把 Session 交给 FastAPI：请求处理完，FastAPI 回来继续执行 finally 收尾。
     with Session(engine) as session:
         yield session
 
@@ -206,6 +233,8 @@ def ensure_schema(target_engine=None) -> list[str]:
 # /health 用它：连不上就返回 ok:false，而不是抛异常，保证探活接口永远有响应
 def check_connection(target_engine=None) -> dict[str, object]:
     try:
+    # 对比一下：这里用 engine.connect() 而不是 Session ——
+    # 只是跑一条 SELECT 看看版本，不需要工作单元/事务/对象身份这些语义。
         with (target_engine or engine).connect() as conn:
             version = conn.execute(sa_text("SELECT version()")).scalar_one()
             dbname = conn.execute(sa_text("SELECT current_database()")).scalar_one()

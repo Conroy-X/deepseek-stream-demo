@@ -213,13 +213,17 @@ def register(payload: RegisterRequest, session: Session = Depends(store.get_sess
         display_name=payload.display_name,
         password_hash=security.hash_password(payload.password),
     )
+    # ① add()：只把对象登记进 Session 的「待写入」集合 —— 此刻还没发 SQL
     session.add(user)
     try:
+        # ② commit()：这时才真正 INSERT，同时结束事务。成功后对象拿到自增主键
         session.commit()
     # 用数据库的唯一约束兜并发：先查再插存在竞态窗口（两个请求同时查到「不存在」）
     except IntegrityError:
+        # rollback()：事务已经失败，必须回滚收尾；不回滚的话这个 Session 之后每个操作都会报错
         session.rollback()
         raise HTTPException(status_code=409, detail="email 已注册") from None
+    # ③ refresh()：commit 让属性过期了，这里显式重读一行，确保拿到数据库的真实值
     session.refresh(user)
     return {"id": user.id, "email": user.email}
 
@@ -232,6 +236,8 @@ def login(
     session: Session = Depends(store.get_session),
 ) -> TokenResponse:
     email = (form.username or "").strip().lower()
+    # exec(select(...))：Session 是查询入口。注意 select() 只是构造语句，真正执行在这一步
+    # .first() 拿第一行或 None（配合下面的「同一句错误提示」防账号枚举）
     user = session.exec(select(User).where(User.email == email)).first()
     # 用户不存在与密码错误返回同一句话：防账号枚举，否则攻击者能逐个探测哪些邮箱注册过
     if user is None or not security.verify_password(form.password, user.password_hash):
@@ -259,6 +265,7 @@ def create_conversation(
     session: Session = Depends(store.get_session),
 ) -> dict:
     conv = Conversation(user_id=user.id, title=payload.title)
+    # 三步曲：add 登记 → commit 落库 → refresh 回填 id
     session.add(conv)
     session.commit()
     session.refresh(conv)
@@ -270,12 +277,15 @@ def list_conversations(
     user: User = Depends(get_current_user),
     session: Session = Depends(store.get_session),
 ) -> list[dict]:
+    # select() 只是把 SQL 拼成对象，不发请求；执行发生在下面的 exec()
     stmt = (
         select(Conversation)
         .where(Conversation.user_id == user.id)
         .order_by(Conversation.updated_at.desc())
     )
     out = []
+    # exec(stmt).all()：到这里才发 SQL。查出来的 Conversation 对象会进 identity map，
+    # 后面再按同一主键取就不会重复查库
     for c in session.exec(stmt).all():
         # 注意这里是 N+1 查询：列表里每个会话各查一次最后一条消息。
         # 会话多时应该改成一次 group by 或子查询，别让列表接口退化成 N 次 IO。
@@ -304,6 +314,7 @@ def delete_conversation(
     session: Session = Depends(store.get_session),
 ) -> dict:
     conv = _owned(session, conversation_id, user)
+    # delete() 只是标记待删除，commit() 时才真正发 DELETE（消息由数据库 CASCADE 带走）
     session.delete(conv)
     session.commit()
     return {"deleted": conversation_id}
@@ -382,6 +393,7 @@ async def chat_turn(
     #    否则刷新页面这条消息就凭空消失了，用户会以为是自己没发出去。
     # tokens 记 0：计费大头在输出侧，用户输入的 token 不在这里精确统计
     user_msg = Message(conversation_id=conv.id, role="user", content=turn.content, tokens=0)
+    # ① 用户消息先落库：add → commit → refresh，和 register 一样的三步曲
     session.add(user_msg)
     _auto_title(session, conv, turn.content)
     session.commit()
@@ -436,6 +448,9 @@ async def chat_turn(
             content = "".join(parts)
             if content:
             # 另开一个 Session：请求级 session 可能在流还没结束时就已经关闭
+                # 这里必须新开一个 Session：请求级 session 会随请求结束被关掉，
+                # 而流式响应还没结束。自己开、自己提交、with 退出自动关。
+                # 也顺便绕开了 identity map：拿到的一定是数据库里的最新状态。
                 with Session(store.engine) as s2:
                     s2.add(
                         Message(
