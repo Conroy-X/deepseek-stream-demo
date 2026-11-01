@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Unit 23 · 文档流水线</title>
+<style>
+  :root{--bg:#f7f7f5;--card:#fff;--line:#e3e2de;--text:#23231f;--dim:#7a7972;--accent:#185FA5;--ok:#0F6E56;--bad:#A32D2D;--warn:#854F0B}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font:14px/1.65 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;padding:20px}
+  .wrap{max-width:1040px;margin:0 auto}
+  h1{font-size:19px;font-weight:600}
+  h2{font-size:13px;font-weight:600;color:var(--dim);margin-bottom:11px;letter-spacing:.02em}
+  .sub{color:var(--dim);font-size:13px;margin:4px 0 16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:15px;margin-bottom:14px}
+  button{padding:7px 13px;border:1px solid var(--line);border-radius:7px;background:#fff;font:inherit;font-size:13px;cursor:pointer;color:var(--text)}
+  button:hover{background:#f0efec}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{background:#0C447C}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+  label{font-size:12px;color:var(--dim);display:block;margin-bottom:4px}
+  input[type=text],input[type=file],textarea{width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:7px;font:inherit;font-size:13px;background:#fff}
+  textarea{min-height:88px;resize:vertical;line-height:1.6}
+  .banner{padding:9px 13px;border-radius:8px;font-size:13px;margin-bottom:14px;border:1px solid var(--line);background:var(--card);color:var(--dim)}
+  .banner.ok{border-color:#9FE1CB;background:#E1F5EE;color:var(--ok)}
+  .banner.warn{border-color:#FAC775;background:#FAEEDA;color:var(--warn)}
+  .banner.bad{border-color:#F3B6B6;background:#FCEAEA;color:var(--bad)}
+  .tag{display:inline-block;font-size:11.5px;padding:1px 7px;border-radius:20px;border:1px solid var(--line);color:var(--dim)}
+  .tag.ok{border-color:#9FE1CB;background:#E1F5EE;color:var(--ok)}
+  .tag.bad{border-color:#F3B6B6;background:#FCEAEA;color:var(--bad)}
+  .tag.warn{border-color:#FAC775;background:#FAEEDA;color:var(--warn)}
+  .tag.run{border-color:#B5D4F0;background:#E7F1FB;color:var(--accent)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font-size:12px;color:var(--dim);font-weight:600}
+  td.num{text-align:right;font-variant-numeric:tabular-nums}
+  .mono{font-family:ui-monospace,Consolas,monospace;font-size:12px}
+  .chunk{border:1px solid var(--line);border-radius:9px;padding:10px 12px;margin-bottom:8px;background:#fff}
+  .chunk .hd{display:flex;gap:8px;align-items:center;font-size:11.5px;color:var(--dim);margin-bottom:5px}
+  .chunk .tx{font-size:13px;white-space:pre-wrap;word-break:break-word}
+  .err{color:var(--bad);font-size:12.5px}
+  .note{font-size:12.5px;color:var(--warn);background:#FAEEDA;border:1px solid #FAC775;border-radius:8px;padding:8px 12px;margin-top:10px}
+  .dim{color:var(--dim);font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Unit 23 · 文档流水线</h1>
+  <div class="sub">上传只是进队列；Parse → Chunk 由 worker 领任务完成，失败可诊断、重试不重复</div>
+
+  <div class="banner" id="health">探测后端…</div>
+
+  <div class="card">
+    <h2>① 上传</h2>
+    <div class="grid">
+      <div><label>选文件（.md / .txt / .html / .csv / .pdf / .docx）</label><input type="file" id="file"></div>
+      <div><label>或直接贴正文</label><textarea id="text" placeholder="贴一段文字，会当成 粘贴文本.txt"></textarea></div>
+    </div>
+    <div class="row">
+      <input type="text" id="name" placeholder="文件名（留空用原文件名）" style="max-width:260px">
+      <label style="margin:0"><input type="checkbox" id="fail"> 注入解析失败</label>
+      <button class="primary" onclick="upload()">上传（只入队）</button>
+      <button onclick="seed()">塞入 4 篇内置文档</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>② 跑 worker</h2>
+    <div class="row">
+      <button onclick="tick()">跑一次 tick</button>
+      <button onclick="drain()">全部跑完（最多 20 次）</button>
+      <span class="dim" id="last">还没跑过</span>
+    </div>
+    <div class="note">tick = 领一条任务（写租约 + attempts+1）→ Parse → Chunk → 删旧块写新块 → done。
+      重复 tick 不会重复写 chunk，这是幂等，不是运气。</div>
+  </div>
+
+  <div id="docs"></div>
+  <div id="chunks"></div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+async function api(path, opts) {
+  const r = await fetch(path, opts || {});
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.detail || ("HTTP " + r.status));
+  return d;
+}
+const postJSON = (p, b) => api(p, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(b || {})});
+
+const BADGE = {pending: "warn", running: "run", done: "ok", failed: "bad"};
+const badge = s => `<span class="tag ${BADGE[s] || ""}">${esc(s)}</span>`;
+
+async function loadHealth() {
+  try {
+    const h = await api("health");
+    $("health").className = "banner ok";
+    $("health").textContent =
+      `库：${h.stats.documents} 文档 / ${h.stats.chunks} chunk · 任务 ` +
+      `pending ${h.stats.by_task_status.pending} · done ${h.stats.by_task_status.done} · failed ${h.stats.by_task_status.failed}` +
+      `　|　chunk ${h.chunk.strategy} size=${h.chunk.size} overlap=${h.chunk.overlap}` +
+      `　|　租约 ${h.lease_seconds}s · 最多 ${h.max_attempts} 次`;
+  } catch (e) {
+    $("health").className = "banner bad";
+    $("health").textContent = "后端没响应：" + e.message;
+  }
+}
+
+async function upload() {
+  const fd = new FormData();
+  const f = $("file").files[0];
+  const t = $("text").value.trim();
+  if (f) fd.append("file", f);
+  else if (t) fd.append("text", t);
+  else return alert("选个文件，或贴一段正文");
+  if ($("name").value.trim()) fd.append("name", $("name").value.trim());
+  fd.append("fail_inject", $("fail").checked ? "1" : "0");
+  try {
+    const d = await api("docs", {method: "POST", body: fd});
+    $("last").textContent = `已入队 ${d.document.name}（${d.document.status}）· 任务 #${d.task.id}`;
+    $("text").value = ""; $("file").value = ""; $("name").value = "";
+    await refresh();
+  } catch (e) {
+    $("last").innerHTML = `<span class="err">${esc(e.message)}</span>`;
+  }
+}
+
+async function seed() {
+  try {
+    const d = await api("demo/seed", {method: "POST"});
+    $("last").textContent = `塞入 ${d.seeded} 篇，点「全部跑完」看结果`;
+    await refresh();
+  } catch (e) { $("last").innerHTML = `<span class="err">${esc(e.message)}</span>`; }
+}
+
+async function tick() {
+  try {
+    const d = await postJSON("worker/tick", {worker: "ui-worker"});
+    $("last").innerHTML = d.claimed
+      ? `处理 #${esc(d.task_id)} → ${badge(d.status)} ${esc(d.chunks || 0)} 块 / ${esc(d.ms)} ms` +
+        (d.error ? ` <span class="err">${esc(d.error)}</span>` : "")
+      : `队列空了（${esc(d.reason)}）`;
+    await refresh();
+  } catch (e) { $("last").innerHTML = `<span class="err">${esc(e.message)}</span>`; }
+}
+
+async function drain() {
+  try {
+    const d = await api("worker/drain", {method: "POST", headers: {"Content-Type": "application/json"}, body: "{}"});
+    const failed = d.results.filter(r => r.status === "failed").length;
+    $("last").innerHTML = `跑了 ${esc(d.processed)} 条，其中失败 ${esc(failed)} 条`;
+    await refresh();
+  } catch (e) { $("last").innerHTML = `<span class="err">${esc(e.message)}</span>`; }
+}
+
+async function retry(id) {
+  try {
+    await api(`docs/${id}/retry`, {method: "POST"});
+    await refresh();
+  } catch (e) { $("last").innerHTML = `<span class="err">${esc(e.message)}</span>`; }
+}
+
+async function openDoc(id) {
+  try {
+    const d = await api(`docs/${id}`);
+    const doc = d.document;
+    $("chunks").innerHTML = `<div class="card">
+      <h2>${esc(doc.name)} · ${doc.chunk_count} 块 · ${doc.chars} 字 · ${doc.pages} 页 · ${esc(doc.kind)}</h2>
+      ${d.chunk_count ? d.chunks.map(c => `
+        <div class="chunk">
+          <div class="hd"><b>#${c.idx}</b><span>第 ${c.page} 页</span><span>${c.chars} 字</span>
+            <span class="mono">[${c.start}, ${c.end})</span></div>
+          <div class="tx">${esc(c.text)}</div>
+        </div>`).join("") : `<div class="err">${esc(doc.error || "还没有 chunk：任务没跑成功")}</div>`}
+    </div>`;
+  } catch (e) { $("chunks").innerHTML = `<div class="card"><div class="err">${esc(e.message)}</div></div>`; }
+}
+
+async function refresh() {
+  await loadHealth();
+  try {
+    const d = await api("docs");
+    if (!d.count) {
+      $("docs").innerHTML = `<div class="card"><div class="dim">库里还没有文档。上传一份，或点「塞入 4 篇内置文档」。</div></div>`;
+      return;
+    }
+    $("docs").innerHTML = `<div class="card">
+      <h2>③ 文档与任务（共 ${d.count} 条）</h2>
+      <table><thead><tr>
+        <th>文档</th><th>文档状态</th><th class="num">块</th><th>任务</th>
+        <th class="num">attempts</th><th>租约</th><th>操作</th>
+      </tr></thead><tbody>
+      ${d.items.map(i => {
+        const lease = i.leased_until ? Math.max(0, Math.round(i.leased_until - Date.now() / 1000)) + "s" : "—";
+        return `<tr>
+          <td>${esc(i.name)}<div class="mono dim">${esc(i.id)}</div>
+            ${i.error ? `<div class="err">${esc(i.error)}</div>` : ""}</td>
+          <td>${badge(i.status)}</td>
+          <td class="num">${i.chunk_count}</td>
+          <td>${i.task_status ? badge(i.task_status) : "—"}</td>
+          <td class="num">${i.attempts ?? 0}/${i.max_attempts ?? "—"}</td>
+          <td class="mono">${lease}</td>
+          <td><button onclick="openDoc('${esc(i.id)}')">看块</button>
+              <button onclick="retry('${esc(i.id)}')">重试</button></td>
+        </tr>`;
+      }).join("")}
+      </tbody></table>
+      <div class="note">status=failed 的行一定带 error 文案；attempts 到上限就不再领取 —— 无限重试比失败更糟。</div>
+    </div>`;
+  } catch (e) {
+    $("docs").innerHTML = `<div class="card"><div class="err">${esc(e.message)}</div></div>`;
+  }
+}
+
+refresh();
+</script>
+</body>
+</html>

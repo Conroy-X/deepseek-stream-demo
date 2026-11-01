@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Unit 49 · 第一个 Server</title>
+<style>
+  :root{--bg:#f7f7f5;--card:#fff;--line:#e3e2de;--text:#23231f;--dim:#7a7972;
+        --accent:#185FA5;--ok:#0F6E56;--bad:#A32D2D;--warn:#854F0B}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+       font:14px/1.65 -apple-system,"Segoe UI","Noto Sans CJK SC",sans-serif}
+  header{padding:26px 30px 18px;border-bottom:1px solid var(--line);background:var(--card)}
+  h1{margin:0 0 6px;font-size:19px;font-weight:650;letter-spacing:-.2px}
+  header p{margin:0;color:var(--dim);font-size:13px;max-width:780px}
+  main{max-width:1100px;margin:0 auto;padding:22px 30px 60px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px 20px;margin-bottom:16px}
+  .card h2{margin:0 0 4px;font-size:14px;font-weight:650}
+  .card .sub{color:var(--dim);font-size:12.5px;margin:0 0 14px}
+  .tag{display:inline-block;padding:1px 7px;border-radius:5px;font-size:11.5px;
+       background:#eef2f7;color:var(--accent);margin-right:6px}
+  .tag.ok{background:#e8f3ef;color:var(--ok)}
+  .tag.bad{background:#fbecec;color:var(--bad)}
+  .tag.warn{background:#fbf1e3;color:var(--warn)}
+  .note{background:#fbfaf7;border-left:2px solid var(--line);padding:9px 12px;
+        color:var(--dim);font-size:12.5px;border-radius:0 6px 6px 0;margin:12px 0 0}
+  .banner{background:#e8f3ef;border:1px solid #cfe4db;color:var(--ok);
+          padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:16px;display:none}
+  .banner.bad{background:#fbecec;border-color:#f0cfcf;color:var(--bad)}
+  .banner.warn{background:#fbf1e3;border-color:#eee0c8;color:var(--warn)}
+  pre{margin:0;background:#1e1e1c;color:#e6e4dd;padding:12px 14px;border-radius:8px;
+      font:12px/1.55 ui-monospace,"Cascadia Code",Menlo,monospace;overflow:auto;max-height:320px;
+      white-space:pre-wrap;word-break:break-word}
+  button{font:inherit;font-size:12.5px;padding:6px 13px;border-radius:7px;cursor:pointer;
+         border:1px solid var(--line);background:#fff;color:var(--text)}
+  button:hover{border-color:#c9c8c2}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{background:#14538f}
+  input{font:inherit;font-size:12.5px;padding:5px 8px;border:1px solid var(--line);
+        border-radius:6px;background:#fff;color:var(--text);width:100%}
+  .meta{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:6px}
+  .kv{border:1px solid var(--line);border-radius:8px;padding:9px 12px;background:#fcfcfb}
+  .kv .k{font-size:11px;color:var(--dim);letter-spacing:.05em;text-transform:uppercase}
+  .kv .v{font-size:13px;font-weight:600;margin-top:2px;word-break:break-all}
+  .tool{border:1px solid var(--line);border-radius:9px;padding:12px 14px;margin-bottom:10px;background:#fcfcfb}
+  .tool h4{margin:0 0 3px;font-size:12.5px;font-weight:650}
+  .tool .desc{color:var(--dim);font-size:12px;margin:0 0 9px}
+  .params{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:9px}
+  .params label{display:block;font-size:11px;color:var(--dim);margin-bottom:2px}
+  .out{margin-top:9px;font-size:12px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .pit{border:1px solid var(--line);border-radius:9px;padding:12px 14px;margin-bottom:10px;background:#fcfcfb}
+  .pit.bad{border-color:#f0cfcf;background:#fdf7f7}
+  .pit h4{margin:0 0 6px;font-size:12.5px;font-weight:650}
+  .pit p{margin:6px 0 0;font-size:12px;color:var(--dim)}
+  .pit code{background:#f2f1ed;padding:1px 5px;border-radius:4px;font-size:11.5px}
+  .foot{color:var(--dim);font-size:12px;text-align:center;padding-top:8px}
+  @media(max-width:860px){.meta,.grid2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Unit 49 · 第一个 Server</h1>
+  <p>前三章手写的协议层，这里全变成装饰器。但这个页面本身就是一个 MCP 客户端 ——
+     每点一次按钮都真的起一个 stdio 子进程、真握手、真调工具。</p>
+</header>
+
+<main>
+  <div class="banner" id="banner"></div>
+
+  <section class="card">
+    <h2>连接</h2>
+    <p class="sub">一次 <code>initialize</code> = 一次握手。下面四个格子来自握手响应。</p>
+    <div class="meta" id="meta"><div class="note" style="grid-column:1/-1">连接中…</div></div>
+    <div class="note" id="capsNote"></div>
+  </section>
+
+  <section class="card">
+    <h2>工具</h2>
+    <p class="sub">参数表单是按 <code>input_schema</code> 自动生成的 —— 这也是模型看到的东西。</p>
+    <div id="tools"><div class="note">加载中…</div></div>
+  </section>
+
+  <section class="card">
+    <h2>三个坑，现场演示</h2>
+    <p class="sub">都是 SDK 2.x 的真实行为，不是编的。</p>
+    <div class="row" style="margin-bottom:12px"><button class="primary" id="btnPit">跑一遍</button></div>
+    <div id="pits"><div class="note">点「跑一遍」。</div></div>
+  </section>
+
+  <section class="card">
+    <h2>资源与提示词</h2>
+    <div class="grid2">
+      <div>
+        <div class="sub" style="margin:0 0 8px">Resource</div>
+        <div id="resList"><div class="note">加载中…</div></div>
+        <pre id="resBody" style="margin-top:10px;min-height:80px">—</pre>
+      </div>
+      <div>
+        <div class="sub" style="margin:0 0 8px">Prompt</div>
+        <div id="promptList"><div class="note">加载中…</div></div>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <input id="promptArg" placeholder="topic 参数，如 RAG" value="RAG">
+          <button class="primary" id="btnPrompt" style="white-space:nowrap">展开</button>
+        </div>
+        <pre id="promptBody" style="margin-top:10px;min-height:80px">—</pre>
+      </div>
+    </div>
+  </section>
+
+  <div class="foot">8049 · 离线自检见 <code>python main.py</code></div>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function banner(msg, kind){
+  const el = $('banner');
+  el.textContent = msg; el.className = 'banner' + (kind ? ' ' + kind : '');
+  el.style.display = msg ? 'block' : 'none';
+}
+async function getJSON(url, opts){
+  const r = await fetch(url, opts);
+  if(!r.ok) throw new Error(url + ' → ' + r.status + ' ' + (await r.text()).slice(0,150));
+  return r.json();
+}
+
+let SNAP = null;
+
+async function loadSnapshot(){
+  SNAP = await getJSON('/api/snapshot');
+  $('meta').innerHTML = `
+    <div class="kv"><div class="k">serverInfo.name</div><div class="v">${esc(SNAP.server_name)}</div></div>
+    <div class="kv"><div class="k">protocolVersion</div><div class="v">${esc(SNAP.protocol_version)}</div></div>
+    <div class="kv"><div class="k">handshakes</div><div class="v">${SNAP.handshakes} 次</div></div>
+    <div class="kv"><div class="k">工具 / 资源 / 提示词</div>
+      <div class="v">${SNAP.tools.length} / ${SNAP.resources.length} / ${SNAP.prompts.length}</div></div>`;
+  $('capsNote').textContent = '能力表：' + JSON.stringify(SNAP.capabilities);
+
+  $('tools').innerHTML = SNAP.tools.map(t => {
+    const props = (t.input_schema && t.input_schema.properties) || {};
+    const req = (t.input_schema && t.input_schema.required) || [];
+    const fields = Object.entries(props).map(([k, v]) => `
+      <div>
+        <label>${esc(k)}${req.includes(k) ? ' *' : ''} <span style="opacity:.6">${esc(v.type || '')}</span></label>
+        <input data-tool="${esc(t.name)}" data-arg="${esc(k)}" placeholder="${esc(v.type === 'number' ? '数字' : '文本')}">
+      </div>`).join('') || '<div class="note" style="margin:0">无参数</div>';
+    return `
+      <div class="tool">
+        <h4>${esc(t.name)}</h4>
+        <p class="desc">${esc(t.description)}</p>
+        <div class="params">${fields}</div>
+        <button class="primary" data-run="${esc(t.name)}">调用</button>
+        <pre class="out" data-out="${esc(t.name)}" style="display:none"></pre>
+      </div>`;
+  }).join('');
+
+  $('tools').querySelectorAll('[data-run]').forEach(btn => {
+    btn.onclick = async () => {
+      const name = btn.dataset.run;
+      const args = {};
+      $('tools').querySelectorAll(`[data-arg][data-tool="${name}"]`).forEach(inp => {
+        let v = inp.value.trim();
+        if(v === '') return;
+        if(!isNaN(Number(v)) && v !== '') v = Number(v);
+        args[inp.dataset.arg] = v;
+      });
+      const out = $('tools').querySelector(`[data-out="${name}"]`);
+      out.style.display = 'block';
+      out.textContent = '调用中…';
+      try{
+        const d = await getJSON('/api/call', {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({name, arguments: args})
+        });
+        out.textContent = JSON.stringify(d, null, 2);
+        banner(d.ok ? `${name} 成功` : `${name} 失败${d.raised ? '（客户端侧 ' + d.raised + '）' : ''}`,
+               d.ok ? 'ok' : 'warn');
+      }catch(e){ out.textContent = e.message; banner(e.message, 'bad'); }
+    };
+  });
+
+  $('resList').innerHTML = SNAP.resources.map(r =>
+    `<div class="tool" style="margin-bottom:8px">
+       <h4>${esc(r.name)}</h4>
+       <p class="desc"><code>${esc(r.uri)}</code> · ${esc(r.mime_type)}</p>
+       <button data-res="${esc(r.uri)}">读取</button>
+     </div>`).join('') || '<div class="note">没有资源</div>';
+  $('resList').querySelectorAll('[data-res]').forEach(btn => {
+    btn.onclick = async () => {
+      try{
+        const d = await getJSON('/api/resource?uri=' + encodeURIComponent(btn.dataset.res));
+        $('resBody').textContent = d.text;
+        banner('资源是只读上下文，读两次结果一样。', 'ok');
+      }catch(e){ $('resBody').textContent = e.message; banner(e.message, 'bad'); }
+    };
+  });
+
+  $('promptList').innerHTML = SNAP.prompts.map(p =>
+    `<div class="tool" style="margin-bottom:8px">
+       <h4>${esc(p.name)}</h4>
+       <p class="desc">${esc(p.description)}</p>
+       <p class="desc">参数：${p.arguments.map(a => esc(a.name) + (a.required ? '*' : '')).join('、') || '无'}</p>
+     </div>`).join('') || '<div class="note">没有提示词</div>';
+}
+
+$('btnPrompt').onclick = async () => {
+  try{
+    const d = await getJSON('/api/prompt', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({name:'intro', arguments:{topic: $('promptArg').value || 'MCP'}})
+    });
+    $('promptBody').textContent = d.messages.map(m => `[${m.role}]\n${m.text}`).join('\n\n');
+    banner('prompt 展开成 messages 数组，不是字符串。', 'ok');
+  }catch(e){ $('promptBody').textContent = e.message; banner(e.message, 'bad'); }
+};
+
+$('btnPit').onclick = async () => {
+  $('pits').textContent = '跑中…（每条都要起一个子进程）';
+  try{
+    const d = await getJSON('/api/pitfalls');
+    $('pits').innerHTML = d.pitfalls.map(p => {
+      const o = p.observed;
+      const cls = o.ok ? 'pit' : 'pit bad';
+      const badge = o.ok
+        ? '<span class="tag ok">is_error = false</span>'
+        : `<span class="tag bad">is_error = true</span>`;
+      return `
+        <div class="${cls}">
+          <h4>${esc(p.title)} ${badge}</h4>
+          <pre style="max-height:140px">${esc(JSON.stringify(o, null, 2))}</pre>
+          <p>${esc(p.explain)}</p>
+        </div>`;
+    }).join('');
+    banner('四条都是实测：一个被脱敏、一个自己兜住、两个返回 is_error 但文本一个太少一个太多。', 'warn');
+  }catch(e){ $('pits').textContent = e.message; banner(e.message, 'bad'); }
+};
+
+(async () => {
+  try{ await loadSnapshot(); }
+  catch(e){ banner(e.message, 'bad'); }
+})();
+</script>
+</body>
+</html>

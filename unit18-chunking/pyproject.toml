@@ -1,0 +1,13 @@
+[project]
+name = "unit18-chunking"
+version = "0.1.0"
+description = "Unit 18：固定 / 递归 / 语义三种切块策略与固定问题集对比"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi[standard]>=0.115",
+    "httpx>=0.27",
+    "python-dotenv>=1.0",
+]
+
+[tool.uv]
+package = false

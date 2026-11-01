@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Unit 55 · 数据库 Agent 实验台</title>
+<style>
+  :root{--bg:#f7f7f5;--card:#fff;--line:#e3e2de;--text:#23231f;--dim:#7a7972;--accent:#185FA5;--ok:#0F6E56;--bad:#A32D2D;--warn:#854F0B}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font:14px/1.65 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;padding:20px}
+  .wrap{max-width:1120px;margin:0 auto}
+  h1{font-size:19px;font-weight:600}h2{font-size:13px;font-weight:600;color:var(--dim);margin-bottom:11px;letter-spacing:.02em}
+  .sub{color:var(--dim);font-size:13px;margin:4px 0 16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:15px;margin-bottom:14px}
+  button{padding:7px 13px;border:1px solid var(--line);border-radius:7px;background:#fff;font:inherit;font-size:13px;cursor:pointer;color:var(--text)}
+  button:hover{background:#f0efec}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{background:#0C447C}
+  button.mini{padding:3px 9px;font-size:12px}
+  input[type=text]{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:7px;font:inherit;font-size:13.5px;background:#fff}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .banner{padding:9px 13px;border-radius:8px;font-size:13px;margin-bottom:14px;border:1px solid var(--line);background:var(--card)}
+  .banner.ok{border-color:#9FE1CB;background:#E1F5EE;color:var(--ok)}
+  .banner.warn{border-color:#FAC775;background:#FAEEDA;color:var(--warn)}
+  .banner.bad{border-color:#F7C1C1;background:#FCEBEB;color:var(--bad)}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
+  @media (max-width:920px){.grid{grid-template-columns:1fr}}
+  .tag{display:inline-block;font-size:11.5px;padding:1px 7px;border-radius:20px;border:1px solid var(--line);color:var(--dim)}
+  .tag.ok{border-color:#9FE1CB;background:#E1F5EE;color:var(--ok)}
+  .tag.bad{border-color:#F7C1C1;background:#FCEBEB;color:var(--bad)}
+  .tag.warn{border-color:#FAC775;background:#FAEEDA;color:var(--warn)}
+  textarea{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:7px;font:12px/1.6 ui-monospace,Consolas,monospace;background:#fff;resize:vertical}
+  pre{background:#fbfbf9;border:1px solid var(--line);border-radius:8px;padding:10px;font:12px/1.6 ui-monospace,Consolas,monospace;overflow:auto;white-space:pre-wrap;word-break:break-word;max-height:260px}
+  .ph{color:var(--dim);font-size:13px}
+  .note{font-size:12.5px;color:var(--warn);background:#FAEEDA;border:1px solid #FAC775;border-radius:8px;padding:8px 12px;margin-top:10px}
+  .note.ok{color:var(--ok);background:#E1F5EE;border-color:#9FE1CB}
+  .note.bad{color:var(--bad);background:#FCEBEB;border-color:#F7C1C1}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th,td{border-bottom:1px solid var(--line);padding:5px 7px;text-align:left}
+  th{color:var(--dim);font-weight:600;font-size:11.5px}
+  .chain{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+  .link{flex:1;min-width:150px;border:1px solid var(--line);border-radius:9px;padding:8px 10px;font-size:12px;background:#fff}
+  .link.done{border-color:#9FE1CB;background:#F3FBF7}
+  .link b{display:block;font-size:12.5px;margin-bottom:2px}
+  .link .n{font-size:11px;color:var(--dim)}
+  .logline{font:11.5px/1.6 ui-monospace,Consolas,monospace;color:var(--dim);border-bottom:1px dashed var(--line);padding:4px 0;word-break:break-all}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Unit 55 · 数据库 Agent 实验台</h1>
+  <div class="sub">问一句话 → 看它生成什么 SQL → 看 MCP 只读执行 → 看答案怎么拼出来</div>
+
+  <div class="banner" id="health">探测后端…</div>
+
+  <div class="card">
+    <h2>① 四环链路</h2>
+    <div class="chain" id="chain"></div>
+    <div class="ph" id="chainhint"></div>
+  </div>
+
+  <div class="card">
+    <h2>② 用自然语言提问</h2>
+    <div class="row">
+      <input type="text" id="q" value="上月华东区销售额前 3 的产品是哪些？" spellcheck="false">
+      <button class="primary" onclick="ask()">提问</button>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <button class="mini" onclick="pick('上月华东区销售额前 3 的产品是哪些？')">华东 top3</button>
+      <button class="mini" onclick="pick('上月各区域销售额是多少？')">各区域</button>
+      <button class="mini" onclick="pick('一共有多少客户？')">客户数</button>
+      <button class="mini" onclick="pick('上月总销售额是多少？')">总销售额</button>
+      <button class="mini" onclick="pick('按邮箱域名统计客户分布')">问不出来的问题</button>
+    </div>
+    <div class="grid" style="margin-top:12px">
+      <div>
+        <h2 style="margin-bottom:6px">生成的 SQL</h2>
+        <pre id="sql">还没提问。</pre>
+      </div>
+      <div>
+        <h2 style="margin-bottom:6px">自然语言答案</h2>
+        <pre id="answer">—</pre>
+        <div id="meta" class="ph"></div>
+      </div>
+    </div>
+    <div id="tracerow"></div>
+  </div>
+
+  <div class="card">
+    <h2>③ 查询结果</h2>
+    <div id="table"><span class="ph">—</span></div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>④ 直接跑 SQL（只读连接）</h2>
+      <textarea id="raw" rows="5" spellcheck="false">SELECT region, COUNT(*) AS orders FROM orders GROUP BY region ORDER BY orders DESC</textarea>
+      <div class="row" style="margin-top:8px">
+        <button class="primary" onclick="runRaw()">执行</button>
+        <button class="mini" onclick="setRaw('DROP TABLE customers')">试写操作</button>
+        <button class="mini" onclick="setRaw('SELECT 1; DROP TABLE customers')">试多语句</button>
+      </div>
+      <div id="rawhint"></div>
+    </div>
+    <div class="card">
+      <h2>⑤ 工具清单（握手后真实读到的）</h2>
+      <div id="tools"><span class="ph">—</span></div>
+      <div class="note">三个工具就是生成 SQL 所需的最小信息集：有哪些表、表长什么样、跑一条试试。</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s === null || s === undefined ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+async function jfetch(path, opts) {
+  const r = await fetch(path, opts);
+  const d = await r.json().catch(() => ({}));
+  return { ok: r.ok, status: r.status, data: d };
+}
+
+function drawChain(done) {
+  const steps = [
+    ["1 schema 注入", "list_tables + describe_table → 系统提示词"],
+    ["2 生成 SQL", "OfflineModel 按规则拼出 SELECT"],
+    ["3 MCP 只读执行", "run_readonly_sql，mode=ro 连接"],
+    ["4 转成人话", "把 rows 拼成带数字的答案"]
+  ];
+  $("chain").innerHTML = steps.map((s, i) => `
+    <div class="link ${done[i] ? "done" : ""}">
+      <div class="n">${done[i] ? "✓ 已完成" : "· 待执行"}</div>
+      <b>${esc(s[0])}</b>
+      <div class="ph" style="font-size:11.5px">${esc(s[1])}</div>
+    </div>`).join("");
+}
+
+async function loadHealth() {
+  const { data: h } = await jfetch("health");
+  $("health").className = "banner " + (h.ok ? "ok" : "bad");
+  $("health").textContent = `${h.server} · 协议 ${h.protocol} · 工具 ${h.tools.length} 个 · 库 ${h.db} · 账期锚点 ${h.as_of}`;
+  const { data: t } = await jfetch("api/tools");
+  $("tools").innerHTML = t.tools.map(x =>
+    `<div style="margin-bottom:8px"><b>${esc(x.name)}</b> <span class="tag">${esc(Object.keys(x.input_schema.properties || {}).join(" / "))}</span>
+     <div class="ph" style="font-size:12px">${esc(x.description)}</div></div>`).join("");
+  drawChain([false, false, false, false]);
+}
+
+function pick(q) { $("q").value = q; ask(); }
+
+async function ask() {
+  const q = $("q").value.trim();
+  if (!q) return;
+  $("sql").textContent = "…";
+  $("answer").textContent = "…";
+  const { data: d } = await jfetch("api/ask", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ question: q })
+  });
+  const hasSql = !!d.sql;
+  $("sql").textContent = hasSql ? d.sql : "（没有生成 SQL）";
+  $("answer").textContent = d.answer || "（空）";
+  $("meta").textContent = `${d.rounds} 轮 · 工具调用 ${d.tool_calls} 次 · schema ${d.schema_chars} 字符（${d.schema_calls} 次 MCP 调用）· 总耗时 ${d.total_ms} ms`;
+  drawChain([true, hasSql, hasSql, true]);
+  $("tracerow").innerHTML = (d.trace || []).map(t => `<div class="logline">${
+    t.type === "tool"
+      ? `↳ 调 ${esc(t.tool)} · ok=${esc(t.ok)} · ${esc(t.row_count)} 行 · ${esc(t.elapsed_ms)} ms`
+      : `→ 第 ${esc(t.round)} 轮模型：${esc(String(t.content).slice(0, 90))}`
+  }</div>`).join("");
+  if (hasSql && d.rows) renderTable(d.rows);
+  else $("table").innerHTML = '<span class="ph">这次没有执行 SQL，所以没有结果表。</span>';
+  if (!d.sql) {
+    $("tracerow").innerHTML += '<div class="note">它没有瞎编 SQL —— 这是「无法回答」路径，比生成一条错 SQL 强得多。</div>';
+  }
+}
+
+function renderTable(rows) {
+  if (!rows.length) { $("table").innerHTML = '<span class="ph">0 行。</span>'; return; }
+  const cols = Object.keys(rows[0]);
+  $("table").innerHTML = `<table><thead><tr>${cols.map(c => `<th>${esc(c)}</th>`).join("")}</tr></thead>
+    <tbody>${rows.map(r => `<tr>${cols.map(c => `<td>${esc(r[c])}</td>`).join("")}</tr>`).join("")}</tbody></table>
+    <div class="ph" style="margin-top:6px">${rows.length} 行</div>`;
+}
+
+function setRaw(s) { $("raw").value = s; runRaw(); }
+
+async function runRaw() {
+  const { data: d } = await jfetch("api/sql", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sql: $("raw").value, max_rows: 20 })
+  });
+  if (d.ok) {
+    $("rawhint").innerHTML = `<div class="note ok">${esc(d.row_count)} 行 · 往返 ${esc(d.roundtrip_ms)} ms${d.truncated ? " · 已截断" : ""}</div>`;
+    renderTable(d.rows || []);
+  } else {
+    $("rawhint").innerHTML = `<div class="note bad">ok=False：${esc(d.error)}<br>
+      注意 is_error 仍是 false —— 失败原因被当成**正常内容**交给了模型，它才看得见。</div>`;
+    $("table").innerHTML = '<span class="ph">没有结果。</span>';
+  }
+}
+
+loadHealth();
+</script>
+</body>
+</html>

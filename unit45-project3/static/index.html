@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Unit 45 · Research Agent 实验台</title>
+<style>
+  :root{--bg:#f7f7f5;--card:#fff;--line:#e3e2de;--text:#23231f;--dim:#7a7972;--accent:#185FA5;--ok:#0F6E56;--bad:#A32D2D;--warn:#854F0B}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font:14px/1.65 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;padding:20px}
+  .wrap{max-width:1100px;margin:0 auto}
+  h1{font-size:19px;font-weight:600}
+  h2{font-size:13px;font-weight:600;color:var(--dim);margin-bottom:11px}
+  .sub{color:var(--dim);font-size:13px;margin:4px 0 16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:15px;margin-bottom:14px}
+  button{padding:7px 13px;border:1px solid var(--line);border-radius:7px;background:#fff;font:inherit;font-size:13px;cursor:pointer;color:var(--text)}
+  button:hover{background:#f0efec}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  input{padding:8px 11px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:13.5px;background:#fff;color:var(--text)}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .banner{padding:9px 13px;border-radius:8px;font-size:13px;margin-bottom:14px;border:1px solid var(--line);background:var(--card)}
+  .banner.ok{border-color:#9FE1CB;background:#E1F5EE;color:var(--ok)}
+  .banner.bad{border-color:#F5C4C4;background:#FCEBEB;color:var(--bad)}
+  .topo{display:flex;align-items:center;flex-wrap:wrap;gap:6px;font-size:13px}
+  .topo .n{padding:5px 11px;border:1px solid var(--line);border-radius:6px;background:#fbfbf9}
+  .topo .a{color:var(--dim);font-size:11px}
+  pre{font:12.5px/1.7 ui-monospace,"Cascadia Code",monospace;white-space:pre-wrap;word-break:break-word;background:#fbfbf9;border:1px solid var(--line);border-radius:7px;padding:10px;max-height:520px;overflow:auto}
+  .stat{display:flex;gap:14px;flex-wrap:wrap;font-size:12.5px;color:var(--dim);margin-top:8px}
+  .stat b{color:var(--text)}
+  .tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:20px;border:1px solid var(--line);color:var(--dim)}
+  .tag.ok{background:#E1F5EE;border-color:#9FE1CB;color:var(--ok)}
+  .tag.bad{background:#FCEBEB;border-color:#F5C4C4;color:var(--bad)}
+  .tag.warn{background:#FAEEDA;border-color:#FAC775;color:var(--warn)}
+  .err{color:var(--bad);font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Unit 45 · Research Agent 实验台</h1>
+  <div class="sub">LangGraph StateGraph 编排 · search → fetch → extract → analyze → report · 5 节点串成图</div>
+
+  <div class="banner" id="health">探测后端…</div>
+
+  <div class="card">
+    <h2>拓扑</h2>
+    <div class="topo" id="topo"></div>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <input id="q" style="flex:1" value="MCP 协议" placeholder="研究主题">
+      <input id="mx" type="number" min="1" max="10" value="5" style="width:80px" title="max_results">
+      <button class="primary" onclick="doResearch()">跑一遍</button>
+      <button onclick="quick('MCP 协议')">MCP</button>
+      <button onclick="quick('RAG')">RAG（有冲突）</button>
+      <button onclick="quick('LangGraph')">LangGraph</button>
+      <button onclick="quick('量子计算')">查不到</button>
+    </div>
+    <div class="stat" id="stat"></div>
+  </div>
+
+  <div class="card">
+    <h2>Markdown 报告（来自 /research/report）</h2>
+    <pre id="rep">还没有跑</pre>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+async function j(path, opt) {
+  const r = await fetch(path, opt);
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.detail || ("HTTP " + r.status));
+  return d;
+}
+const post = (p, body) => j(p, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+
+async function boot() {
+  try {
+    const h = await j("health");
+    $("health").className = "banner ok";
+    $("health").textContent = `后端就绪 · 拓扑：${h.graph.join(" → ")} · extract_max_points=${h.extract_max_points}`;
+    const g = await j("graph");
+    $("topo").innerHTML = `<span class="n">START</span>` + g.nodes.map(n =>
+      `<span class="a">→</span><span class="n" title="${esc(n.desc)}">${esc(n.name)}</span>`).join("") +
+      `<span class="a">→</span><span class="n">END</span>`;
+    doResearch();
+  } catch (e) {
+    $("health").className = "banner bad";
+    $("health").textContent = "后端没响应：" + e.message;
+  }
+}
+
+function quick(t) { $("q").value = t; doResearch(); }
+
+async function doResearch() {
+  const topic = $("q").value.trim();
+  const mx = Number($("mx").value) || 5;
+  if (!topic) { $("rep").textContent = "topic 不能为空"; return; }
+  try {
+    // 用 /research 拿 state 显示统计，再用 /research/report 拿 Markdown
+    const [state, repText] = await Promise.all([
+      post("research", { topic, max_results: mx }),
+      fetch("research/report", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ topic, max_results: mx }) }).then(r => r.text()),
+    ]);
+    const a = state.analysis || {};
+    $("stat").innerHTML = `
+      <span>搜索 <b>${(state.search_results || []).length}</b></span>
+      <span>抓取 <b>${(state.fetched || []).length}</b></span>
+      <span>要点 <b>${(state.extracted || []).reduce((s, e) => s + (e.points || []).length, 0)}</b></span>
+      <span>主题 <span class="tag ok">${esc(a.topic || "?")}</span></span>
+      <span>共识 <b>${(a.consensus || []).length}</b></span>
+      <span>冲突 <span class="tag ${((a.conflicts || []).length) ? "bad" : "ok"}">${(a.conflicts || []).length}</span></span>
+      <span>补充 <span class="tag warn">${(a.unique_points || []).length}</span></span>
+    `;
+    $("rep").textContent = repText || "（空报告）";
+  } catch (e) {
+    $("rep").innerHTML = `<span class="err">失败：${esc(e.message)}</span>`;
+  }
+}
+
+boot();
+</script>
+</body>
+</html>

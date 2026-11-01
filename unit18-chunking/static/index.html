@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Unit 18 · 切块实验台</title>
+<style>
+  :root{--bg:#f7f7f5;--card:#fff;--line:#e3e2de;--text:#23231f;--dim:#7a7972;--accent:#185FA5;--ok:#0F6E56;--bad:#A32D2D;--warn:#854F0B}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font:14px/1.65 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;padding:20px}
+  .wrap{max-width:1040px;margin:0 auto}
+  h1{font-size:19px;font-weight:600}h2{font-size:13px;font-weight:600;color:var(--dim);margin-bottom:11px;letter-spacing:.02em}
+  .sub{color:var(--dim);font-size:13px;margin:4px 0 16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:15px;margin-bottom:14px}
+  button{padding:7px 13px;border:1px solid var(--line);border-radius:7px;background:#fff;font:inherit;font-size:13px;cursor:pointer;color:var(--text)}
+  button:hover{background:#f0efec}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{background:#0C447C}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .ctrls{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px}
+  .ctrls label{font-size:12px;color:var(--dim);display:block;margin-bottom:4px}
+  .ctrls input,.ctrls select{width:100%;padding:6px 9px;border:1px solid var(--line);border-radius:7px;font:inherit;font-size:13px;background:#fff}
+  .banner{padding:9px 13px;border-radius:8px;font-size:13px;margin-bottom:14px;border:1px solid var(--line);background:var(--card)}
+  .banner.ok{border-color:#9FE1CB;background:#E1F5EE;color:var(--ok)}
+  .banner.warn{border-color:#FAC775;background:#FAEEDA;color:var(--warn)}
+  .chunk{border:1px solid var(--line);border-radius:9px;padding:10px 12px;margin-bottom:8px;background:#fff}
+  .chunk .hd{display:flex;gap:8px;align-items:center;font-size:11.5px;color:var(--dim);margin-bottom:5px}
+  .chunk .tx{font-size:13px;white-space:pre-wrap;word-break:break-word}
+  .chunk .tx em{background:#FFF3C4;font-style:normal}
+  .tag{display:inline-block;font-size:11.5px;padding:1px 7px;border-radius:20px;border:1px solid var(--line);color:var(--dim)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line)}
+  th{font-size:12px;color:var(--dim);font-weight:600}
+  td.num{text-align:right;font-variant-numeric:tabular-nums}
+  .hit{color:var(--ok)}.miss{color:var(--bad)}
+  .err{color:var(--bad);font-size:12.5px}
+  .note{font-size:12.5px;color:var(--warn);background:#FAEEDA;border:1px solid #FAC775;border-radius:8px;padding:8px 12px;margin-top:10px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Unit 18 · 切块实验台</h1>
+  <div class="sub">同一份文档，三种切法：看块数、看边界、看命中率</div>
+
+  <div class="banner" id="health">探测后端…</div>
+
+  <div class="card">
+    <h2>① 参数</h2>
+    <div class="ctrls">
+      <div><label>策略</label>
+        <select id="strategy">
+          <option value="fixed">fixed 固定长度</option>
+          <option value="recursive" selected>recursive 递归</option>
+          <option value="semantic">semantic 语义</option>
+        </select>
+      </div>
+      <div><label>chunk_size（字）</label><input id="size" type="number" value="160" min="20" max="2000"></div>
+      <div><label>overlap（字）</label><input id="overlap" type="number" value="30" min="0" max="500"></div>
+      <div><label>threshold（仅语义）</label><input id="threshold" type="number" value="0.3" step="0.05" min="0" max="1"></div>
+    </div>
+    <div class="row">
+      <button class="primary" onclick="run()">切一份看看</button>
+      <button onclick="compare()">三种策略对比（固定 6 题）</button>
+    </div>
+  </div>
+
+  <div id="stats"></div>
+  <div id="out"></div>
+  <div id="cmp"></div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+async function post(path, body) {
+  const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.detail || ("HTTP " + r.status));
+  return d;
+}
+
+async function loadHealth() {
+  try {
+    const h = await (await fetch("health")).json();
+    $("health").className = "banner ok";
+    $("health").textContent = `内置文档 ${h.demo_pages} 页 / ${h.demo_chars} 字 · 固定问题 ${h.questions} 道 · 向量后端 ${h.embedder}`;
+  } catch (e) {
+    $("health").className = "banner warn";
+    $("health").textContent = "后端没响应：" + e.message;
+  }
+}
+
+function params() {
+  return {
+    strategy: $("strategy").value,
+    size: +$("size").value,
+    overlap: +$("overlap").value,
+    threshold: +$("threshold").value
+  };
+}
+
+async function run() {
+  const p = params();
+  $("cmp").innerHTML = "";
+  try {
+    const d = await post("chunk", p);
+    $("stats").innerHTML = `<div class="card"><div class="row">
+      <span class="tag">${d.strategy}</span>
+      <span class="tag">块数 ${d.count}</span>
+      <span class="tag">平均 ${d.avg_chars} 字</span>
+      <span class="tag">去重覆盖率 ${(d.coverage * 100).toFixed(1)}%</span>
+      <span class="tag">原文 ${d.total_chars} 字</span>
+    </div></div>`;
+    $("out").innerHTML = d.chunks.map(c => `
+      <div class="chunk">
+        <div class="hd"><b>${c.id}</b><span>第 ${c.page} 页</span><span>${c.chars} 字</span><span>[${c.start}, ${c.end})</span></div>
+        <div class="tx">${mark(c.text, c.index === 0 ? "头" : "")}</div>
+      </div>`).join("");
+  } catch (e) {
+    $("stats").innerHTML = `<div class="card"><div class="err">${esc(e.message)}</div></div>`;
+    $("out").innerHTML = "";
+  }
+}
+
+function mark(t) {
+  // 把段落边界标黄，一眼能看出在哪断的
+  return esc(t).replace(/\n\n/g, '<em>¶</em>\n\n');
+}
+
+async function compare() {
+  const p = params();
+  try {
+    const d = await post("compare", { size: p.size, overlap: p.overlap, top_k: 3 });
+    const best = Math.max(...d.rows.map(r => r["recall@3"]));
+    $("cmp").innerHTML = `<div class="card">
+      <h2>三种策略 · 固定 ${d.rows[0].details.length} 题 · recall@${d.top_k}</h2>
+      <table><thead><tr><th>策略</th><th class="num">块数</th><th class="num">平均字数</th><th class="num">命中</th><th class="num">recall@${d.top_k}</th><th>逐题</th></tr></thead>
+      <tbody>${d.rows.map(r => `<tr>
+        <td>${r.strategy}</td><td class="num">${r.chunks}</td><td class="num">${r.avg_chars}</td>
+        <td class="num">${r.hits}/${r.details.length}</td>
+        <td class="num ${r["recall@3"] === best ? "hit" : ""}">${r["recall@3"].toFixed(2)}</td>
+        <td>${r.details.map(x => `<span class="${x.hit ? "hit" : "miss"}" title="${esc(x.q)}">${x.hit ? "✓" : "✗"}</span>`).join(" ")}</td>
+      </tr>`).join("")}</tbody></table>
+      <div class="note">命中 = 前 ${d.top_k} 个召回块里有一块包含答案原文。
+        块数少不代表差，但块太大就会把多个话题混成一块，向量被平均掉 —— 看逐题就知道是哪几题丢了。</div>
+    </div>`;
+  } catch (e) {
+    $("cmp").innerHTML = `<div class="card"><div class="err">${esc(e.message)}</div></div>`;
+  }
+}
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+loadHealth();
+run();
+</script>
+</body>
+</html>

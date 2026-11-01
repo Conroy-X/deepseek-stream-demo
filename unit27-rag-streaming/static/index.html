@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Unit 27 · 流式输出实验台</title>
+<style>
+  :root{--bg:#f7f7f5;--card:#fff;--line:#e3e2de;--text:#23231f;--dim:#7a7972;--accent:#185FA5;--ok:#0F6E56;--bad:#A32D2D;--warn:#854F0B}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font:14px/1.65 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;padding:20px}
+  .wrap{max-width:1100px;margin:0 auto}
+  h1{font-size:19px;font-weight:600}h2{font-size:13px;font-weight:600;color:var(--dim);margin-bottom:11px;letter-spacing:.02em}
+  .sub{color:var(--dim);font-size:13px;margin:4px 0 16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:15px;margin-bottom:14px}
+  button{padding:7px 13px;border:1px solid var(--line);border-radius:7px;background:#fff;font:inherit;font-size:13px;cursor:pointer;color:var(--text)}
+  button:hover{background:#f0efec}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{background:#0C447C}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .ctrls{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:10px;margin-bottom:12px}
+  .ctrls label{font-size:12px;color:var(--dim);display:block;margin-bottom:4px}
+  .ctrls input,.ctrls select{width:100%;padding:6px 9px;border:1px solid var(--line);border-radius:7px;font:inherit;font-size:13px;background:#fff}
+  textarea{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;font:inherit;font-size:13px;background:#fff;resize:vertical}
+  .banner{padding:9px 13px;border-radius:8px;font-size:13px;margin-bottom:14px;border:1px solid var(--line);background:var(--card)}
+  .banner.ok{border-color:#9FE1CB;background:#E1F5EE;color:var(--ok)}
+  .banner.warn{border-color:#FAC775;background:#FAEEDA;color:var(--warn)}
+  .banner.bad{border-color:#F7C1C1;background:#FCEBEB;color:var(--bad)}
+  .grid{display:grid;grid-template-columns:1.45fr 1fr;gap:14px;align-items:start}
+  @media (max-width:880px){.grid{grid-template-columns:1fr}.ctrls{grid-template-columns:1fr 1fr}}
+  .tag{display:inline-block;font-size:11.5px;padding:1px 7px;border-radius:20px;border:1px solid var(--line);color:var(--dim);font-variant-numeric:tabular-nums}
+  .tag.ok{border-color:#9FE1CB;background:#E1F5EE;color:var(--ok)}
+  .tag.bad{border-color:#F7C1C1;background:#FCEBEB;color:var(--bad)}
+  .tag.warn{border-color:#FAC775;background:#FAEEDA;color:var(--warn)}
+  .answer{font-size:14.5px;line-height:1.85;white-space:pre-wrap;word-break:break-word;min-height:120px}
+  .answer sup{color:var(--accent);font-size:11px;font-weight:600;cursor:pointer;padding:0 1px}
+  .answer sup:hover{text-decoration:underline}
+  .cursor{display:inline-block;width:7px;height:15px;background:var(--accent);vertical-align:-2px;animation:blink .9s steps(1) infinite}
+  @keyframes blink{50%{opacity:0}}
+  .ph{color:var(--dim);font-size:13px}
+  .cite{border:1px solid var(--line);border-radius:9px;padding:9px 11px;margin-bottom:8px;background:#fff;font-size:12.5px}
+  .cite.on{border-color:var(--accent);box-shadow:0 0 0 2px rgba(24,95,165,.12)}
+  .cite .hd{display:flex;gap:7px;align-items:center;margin-bottom:5px;font-size:11.5px;color:var(--dim)}
+  .cite .no{background:var(--accent);color:#fff;border-radius:5px;padding:0 6px;font-size:11px;font-weight:600}
+  .cite .sn{color:var(--text);font-size:12.5px;line-height:1.6}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
+  th{font-size:11.5px;color:var(--dim);font-weight:600}
+  td.num{text-align:right;font-variant-numeric:tabular-nums}
+  .ev{font-family:ui-monospace,Consolas,monospace;font-size:12px}
+  .ev .nm{font-weight:600}
+  .ev .nm.meta{color:var(--accent)}.ev .nm.token{color:var(--dim)}.ev .nm.done{color:var(--ok)}.ev .nm.error{color:var(--bad)}
+  .err{color:var(--bad);font-size:12.5px}
+  .note{font-size:12.5px;color:var(--warn);background:#FAEEDA;border:1px solid #FAC775;border-radius:8px;padding:8px 12px;margin-top:10px}
+  .kv{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Unit 27 · 流式输出实验台</h1>
+  <div class="sub">SSE 一帧一帧地吐：meta 先给引用，token 负责逐字，done 收尾结账</div>
+
+  <div class="banner" id="health">探测后端…</div>
+
+  <div class="card">
+    <h2>① 提问</h2>
+    <textarea id="q" rows="2">退款多久到账，需要什么条件？</textarea>
+    <div class="ctrls" style="margin-top:12px">
+      <div><label>top_k（取几段上下文）</label><input id="topk" type="number" value="4" min="1" max="10"></div>
+      <div><label>max_output_tokens</label><input id="mot" type="number" value="300" min="20" max="2000" step="20"></div>
+      <div><label>max_context_tokens</label><input id="mct" type="number" value="1200" min="100" max="8000" step="100"></div>
+      <div><label>故障注入 fail_after</label><input id="fail" type="number" value="0" min="0" max="100" placeholder="0=关闭"></div>
+    </div>
+    <div class="row">
+      <button class="primary" id="go" onclick="run()">开始流式</button>
+      <button id="stop" onclick="abort()" disabled>中止连接</button>
+      <button onclick="seed()">重灌语料</button>
+      <span class="ph" id="hint">fail_after &gt; 0 时，第 N 个 token 之后后端会抛错，用来练「头已发出、状态码改不了」的收尾。</span>
+    </div>
+  </div>
+
+  <div class="banner" id="err" style="display:none"></div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>② 回答（边到边渲染）</h2>
+      <div class="answer" id="ans"><span class="ph">还没有开始。</span></div>
+      <div class="kv" id="stats"></div>
+    </div>
+    <div class="card">
+      <h2>③ 引用（来自 meta 事件）</h2>
+      <div id="cites"><span class="ph">meta 到达后填充。</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>④ 事件时间线</h2>
+    <table>
+      <thead><tr><th style="width:110px">事件</th><th style="width:90px" class="num">相对时刻</th><th style="width:80px" class="num">字节</th><th>要点</th></tr></thead>
+      <tbody id="log"><tr><td colspan="4" class="ph">等待第一帧…</td></tr></tbody>
+    </table>
+    <div class="note">顺序是契约：meta → token* → done。error 只会替换 done，出现时说明生成中断，此时 HTTP 状态码已经是 200，前端必须靠事件判断失败。</div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+let ctrl = null, acc = "", t0 = 0, ttft = 0, ntok = 0, seenMeta = false;
+
+function reset() {
+  acc = ""; ttft = 0; ntok = 0; seenMeta = false;
+  $("ans").innerHTML =  '<span class="ph">正在检索…</span>';
+  $("cites").innerHTML = '<span class="ph">meta 到达后填充。</span>';
+  $("stats").innerHTML = "";
+  $("log").innerHTML = "";
+  $("err").style.display = "none";
+}
+
+async function loadHealth() {
+  try {
+    const h = await (await fetch("health")).json();
+    $("health").className = "banner ok";
+    $("health").textContent = `后端 ${h.backend} · 已索引 ${h.chunks} 块 · 事件 ${h.events.join(" / ")} · 库 ${h.db}`;
+  } catch (e) {
+    $("health").className = "banner bad";
+    $("health").textContent = "后端没响应：" + e.message;
+  }
+}
+
+function logRow(name, t, bytes, note) {
+  const tr = document.createElement("tr");
+  tr.innerHTML = `<td class="ev"><span class="nm ${name}">${name}</span></td>
+    <td class="num">${t.toFixed(0)} ms</td><td class="num">${bytes}</td>
+    <td>${esc(note || "")}</td>`;
+  $("log").appendChild(tr);
+  return tr;
+}
+
+// token 帧太多，不逐条刷屏：合并成一行累加
+let tokenRow = null;
+function logToken(bytes) {
+  if (!tokenRow) tokenRow = logRow("token", performance.now() - t0, bytes, "逐字推送中…");
+  else tokenRow.children[2].textContent = bytes;
+  return tokenRow;
+}
+
+async function run() {
+  reset();
+  $("go").disabled = true; $("stop").disabled = false;
+  ctrl = new AbortController();
+  t0 = performance.now();
+
+  const body = {
+    question: $("q").value.trim(),
+    top_k: +$("topk").value,
+    max_output_tokens: +$("mot").value,
+    max_context_tokens: +$("mct").value,
+  };
+  const fail = +$("fail").value;
+  if (fail > 0) body.debug_fail_after = fail;
+
+  try {
+    const r = await fetch("v1/rag/stream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: ctrl.signal,
+    });
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      throw new Error(typeof d.detail === "string" ? d.detail : JSON.stringify(d.detail || ("HTTP " + r.status)));
+    }
+    const rid = r.headers.get("X-Request-Id") || "";
+    logRow("meta", 0, 0, "响应头已到，X-Request-Id=" + rid);
+
+    const reader = r.body.getReader();
+    const dec = new TextDecoder();
+    let buf = "";
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let i;
+      while ((i = buf.indexOf("\n\n")) >= 0) {
+        const frame = buf.slice(0, i);
+        buf = buf.slice(i + 2);
+        handle(frame, frame.length + 2);
+      }
+    }
+  } catch (e) {
+    if (e.name === "AbortError") {
+      $("err").className = "banner warn";
+      $("err").style.display = "";
+      $("err").textContent = "已主动断开：后端会看到 CancelledError，不应该再发 done，也不该把这次请求记成成功。";
+    } else {
+      $("err").className = "banner bad";
+      $("err").style.display = "";
+      $("err").textContent = "请求失败：" + e.message;
+    }
+  } finally {
+    $("go").disabled = false; $("stop").disabled = true; ctrl = null;
+  }
+}
+
+function handle(frame, bytes) {
+  let name = "message", data = "";
+  for (const line of frame.split("\n")) {
+    if (line.startsWith("event:")) name = line.slice(6).trim();
+    else if (line.startsWith("data:")) data += line.slice(5).trim();
+  }
+  let obj = {};
+  try { obj = JSON.parse(data || "{}"); } catch (e) { obj = { raw: data }; }
+  const t = performance.now() - t0;
+
+  if (name === "meta") {
+    seenMeta = true;
+    drawCites(obj.citations || []);
+    logRow("meta", t, bytes, `引用 ${(obj.citations || []).length} 条 · 模型 ${obj.model}`);
+  } else if (name === "token") {
+    if (!ttft) ttft = t;
+    acc += obj.text || "";
+    ntok++;
+    logToken(bytes);
+    drawAnswer(true);
+  } else if (name === "done") {
+    drawAnswer(false);
+    logRow("done", t, bytes, `finish_reason=${obj.finish_reason} · 用量 ${obj.usage.input_tokens}in/${obj.usage.output_tokens}out · 非法标记 ${obj.invalid_markers}`);
+    drawStats(obj);
+  } else if (name === "error") {
+    drawAnswer(false);
+    logRow("error", t, bytes, obj.code || "");
+    $("err").className = "banner bad";
+    $("err").style.display = "";
+    $("err").textContent = `${obj.message || "生成失败"}（${obj.code || "?"}，可重试：${obj.retryable ? "是" : "否"}）`;
+  }
+}
+
+function drawAnswer(live) {
+  // 每次整段重绘：量小，换来 [n] 能在流式过程中就点得动
+  const html = esc(acc)
+    .replace(/\[(\d+)\]/g, (m, n) => `<sup data-n="${n}">[${n}]</sup>`)
+    .replace(/\n/g, "<br>");
+  $("ans").innerHTML = (html || '<span class="ph">…</span>') + (live ? '<span class="cursor"></span>' : "");
+  $("ans").querySelectorAll("sup").forEach(el => {
+    el.onclick = () => {
+      const target = document.querySelector(`.cite[data-n="${el.dataset.n}"]`);
+      document.querySelectorAll(".cite").forEach(c => c.classList.remove("on"));
+      if (target) { target.classList.add("on"); target.scrollIntoView({ block: "nearest", behavior: "smooth" }); }
+    };
+  });
+}
+
+function drawCites(list) {
+  if (!list.length) { $("cites").innerHTML = '<span class="ph">这次没有召回任何片段。</span>'; return; }
+  $("cites").innerHTML = list.map(c => `<div class="cite" data-n="${c.id}">
+      <div class="hd"><span class="no">[${c.id}]</span><b>${esc(c.source)}</b><span>第 ${c.page} 页</span>
+        <span class="tag">分 ${c.score.toFixed(3)}</span></div>
+      <div class="sn">${esc(c.snippet)}</div>
+    </div>`).join("");
+}
+
+function drawStats(d) {
+  const total = performance.now() - t0;
+  $("stats").innerHTML = [
+    `<span class="tag">首字 ${ttft.toFixed(0)} ms</span>`,
+    `<span class="tag">总耗时 ${total.toFixed(0)} ms</span>`,
+    `<span class="tag">token 帧 ${ntok}</span>`,
+    `<span class="tag ${d.finish_reason === "stop" ? "ok" : "warn"}">finish ${d.finish_reason}</span>`,
+    `<span class="tag ${d.truncated ? "warn" : "ok"}">${d.truncated ? "被 max_output_tokens 截断" : "完整"}</span>`,
+    `<span class="tag ${d.invalid_markers.length ? "bad" : "ok"}">非法标记 ${d.invalid_markers.length}</span>`,
+    `<span class="tag">in ${d.usage.input_tokens} / out ${d.usage.output_tokens}</span>`,
+    `<span class="tag">${d.request_id}</span>`,
+  ].join("");
+}
+
+function abort() { if (ctrl) ctrl.abort(); }
+
+async function seed() {
+  try {
+    const r = await fetch("seed", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reset: true }) });
+    const d = await r.json();
+    $("health").className = "banner ok";
+    $("health").textContent = `语料已重灌：索引 ${d.indexed} 块，当前 ${d.chunks} 块`;
+    loadHealth();
+  } catch (e) {
+    $("err").className = "banner bad"; $("err").style.display = "";
+    $("err").textContent = "重灌失败：" + e.message;
+  }
+}
+
+loadHealth();
+run();
+</script>
+</body>
+</html>

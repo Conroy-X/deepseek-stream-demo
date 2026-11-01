@@ -1,0 +1,14 @@
+[project]
+name = "unit32-schema"
+version = "0.1.0"
+description = "Unit 32：参数 Schema，Pydantic 生成 OpenAI tools / $defs 摊平 / schema 与校验器同源"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi[standard]>=0.115",
+    "httpx>=0.27",
+    "python-dotenv>=1.0",
+    "pydantic>=2.9",
+]
+
+[tool.uv]
+package = false

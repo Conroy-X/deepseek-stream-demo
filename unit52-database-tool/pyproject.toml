@@ -1,0 +1,14 @@
+[project]
+name = "unit52-database-tool"
+version = "0.1.0"
+description = "Unit 52：Database Tool（只读连接 vs 词法检查）"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi[standard]>=0.115",
+    "httpx>=0.27",
+    "python-dotenv>=1.0",
+    "mcp>=2.0,<3",
+]
+
+[tool.uv]
+package = false

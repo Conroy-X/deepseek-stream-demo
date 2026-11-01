@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Unit 58 · Error Recovery</title>
+<style>
+  :root{--bg:#f7f7f5;--card:#fff;--line:#e3e2de;--text:#23231f;--dim:#7a7972;
+        --accent:#185FA5;--ok:#0F6E56;--bad:#A32D2D;--warn:#854F0B}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+       font:14px/1.65 -apple-system,"Segoe UI","Noto Sans CJK SC",sans-serif}
+  header{padding:26px 30px 18px;border-bottom:1px solid var(--line);background:var(--card)}
+  h1{margin:0 0 6px;font-size:19px;font-weight:650;letter-spacing:-.2px}
+  header p{margin:0;color:var(--dim);font-size:13px;max-width:780px}
+  main{max-width:1100px;margin:0 auto;padding:22px 30px 60px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px 20px;margin-bottom:16px}
+  .card h2{margin:0 0 4px;font-size:14px;font-weight:650}
+  .card .sub{color:var(--dim);font-size:12.5px;margin:0 0 14px}
+  .tag{display:inline-block;padding:1px 7px;border-radius:5px;font-size:11.5px;
+       background:#eef2f7;color:var(--accent);margin-right:6px}
+  .tag.ok{background:#e8f3ef;color:var(--ok)}
+  .tag.bad{background:#fbecec;color:var(--bad)}
+  .banner{background:#e8f3ef;border:1px solid #cfe4db;color:var(--ok);
+          padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:16px;display:none}
+  .banner.bad{background:#fbecec;border-color:#f0cfcf;color:var(--bad)}
+  .banner.warn{background:#fbf1e3;border-color:#eee0c8;color:var(--warn)}
+  pre{margin:0;background:#1e1e1c;color:#e6e4dd;padding:12px 14px;border-radius:8px;
+      font:12px/1.55 ui-monospace,"Cascadia Code",Menlo,monospace;overflow:auto;max-height:280px;
+      white-space:pre-wrap;word-break:break-word}
+  button{font:inherit;font-size:12.5px;padding:6px 13px;border-radius:7px;cursor:pointer;
+         border:1px solid var(--line);background:#fff;color:var(--text)}
+  button:hover{border-color:#c9c8c2}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  textarea{width:100%;font:12.5px/1.5 ui-monospace,Menlo,monospace;padding:8px 10px;
+           border:1px solid var(--line);border-radius:7px;background:#fff;color:var(--text);resize:vertical}
+  .case{border:1px solid var(--line);border-radius:9px;padding:12px 14px;margin-bottom:10px;background:#fcfcfb}
+  .case h4{margin:0 0 6px;font-size:12.5px;font-weight:650}
+  .round{font-size:11.5px;color:var(--dim);margin:4px 0;padding-left:12px;border-left:2px solid var(--line)}
+  .round.fix{border-color:var(--ok);color:var(--ok)}
+  .round.err{border-color:var(--bad);color:var(--bad)}
+  .foot{color:var(--dim);font-size:12px;text-align:center;padding-top:8px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Unit 58 · Error Recovery</h1>
+  <p>SQL 报错喂回模型自动修正，最多 3 次。错误归一化：剥掉 addArguments / pydantic URL，
+     只留「字段名 + 期望类型」。</p>
+</header>
+
+<main>
+  <div class="banner" id="banner"></div>
+
+  <section class="card">
+    <h2>四类典型错误</h2>
+    <p class="sub">前三类修好（1-2 轮），第四类修不好（3 次后停手）。</p>
+    <div id="cases"></div>
+  </section>
+
+  <section class="card">
+    <h2>自己输入 SQL</h2>
+    <textarea id="sql" rows="3">SELECT authr FROM articles LIMIT 1</textarea>
+    <div style="margin-top:10px"><button class="primary" id="btnRun">跑（最多 3 轮）</button></div>
+    <pre id="out" style="margin-top:10px;min-height:80px">点按钮。</pre>
+  </section>
+
+  <div class="foot">8058 · 离线自检见 <code>python main.py</code></div>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function banner(msg, kind){
+  const el = $('banner');
+  el.textContent = msg; el.className = 'banner' + (kind ? ' ' + kind : '');
+  el.style.display = msg ? 'block' : 'none';
+}
+async function getJSON(url, opts){
+  const r = await fetch(url, opts);
+  if(!r.ok) throw new Error(url + ' → ' + r.status + ' ' + (await r.text()).slice(0,150));
+  return r.json();
+}
+
+async function loadCases(){
+  const d = await getJSON('/api/cases');
+  $('cases').innerHTML = d.cases.map(c => {
+    const rounds = c.attempts.map(a => `
+      <div class="round ${a.fixed ? 'fix' : 'err'}">
+        第 ${a.round} 轮：${a.fixed ? '<b>修好</b>' : '<b>报错</b>'} ${esc(a.error_normalized?.hint || '')}<br>
+        SQL: <code>${esc(a.sql)}</code>
+      </div>`).join('');
+    return `<div class="case">
+      <h4>${esc(c.label)} ${c.success ? '<span class="tag ok">修好</span>' : '<span class="tag bad">修不好</span>'}
+        <span class="tag">${c.rounds} 轮</span></h4>
+      ${rounds}
+    </div>`;
+  }).join('');
+}
+
+$('btnRun').onclick = async () => {
+  const sql = $('sql').value;
+  $('out').textContent = '跑中…';
+  try{
+    const d = await getJSON('/api/run', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({sql, max_rounds: 3})
+    });
+    $('out').textContent = JSON.stringify(d, null, 2);
+    banner(d.success ? `修好了，${d.rounds} 轮` : `修不好，跑了 ${d.rounds} 轮后停手`, d.success ? 'ok' : 'warn');
+  }catch(e){ $('out').textContent = e.message; banner(e.message, 'bad'); }
+};
+
+(async () => {
+  try{ await loadCases(); }catch(e){ banner(e.message, 'bad'); }
+})();
+</script>
+</body>
+</html>

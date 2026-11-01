@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Unit 34 · Agent Loop 实验台</title>
+<style>
+  :root{--bg:#f7f7f5;--card:#fff;--line:#e3e2de;--text:#23231f;--dim:#7a7972;--accent:#185FA5;--ok:#0F6E56;--bad:#A32D2D;--warn:#854F0B}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font:14px/1.65 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;padding:20px}
+  .wrap{max-width:1000px;margin:0 auto}
+  h1{font-size:19px;font-weight:600}h2{font-size:13px;font-weight:600;color:var(--dim);margin-bottom:11px}
+  .sub{color:var(--dim);font-size:13px;margin:4px 0 16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:15px;margin-bottom:14px}
+  button{padding:7px 13px;border:1px solid var(--line);border-radius:7px;background:#fff;font:inherit;font-size:13px;cursor:pointer;color:var(--text)}
+  button:hover{background:#f0efec}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  input{padding:8px 11px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:13.5px;background:#fff;color:var(--text)}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .banner{padding:9px 13px;border-radius:8px;font-size:13px;margin-bottom:14px;border:1px solid var(--line);background:var(--card)}
+  .banner.ok{border-color:#9FE1CB;background:#E1F5EE;color:var(--ok)}
+  .banner.bad{border-color:#F5C4C4;background:#FCEBEB;color:var(--bad)}
+  .banner.warn{border-color:#FAC775;background:#FAEEDA;color:var(--warn)}
+  .step{border:1px solid var(--line);border-left:3px solid var(--line);border-radius:9px;padding:9px 12px;margin-bottom:7px;background:#fbfbf9}
+  .step.model{border-left-color:#9FE1CB}.step.tool{border-left-color:var(--accent)}
+  .hd{font-size:11.5px;color:var(--dim);display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:4px}
+  pre{font:12px/1.7 ui-monospace,"Cascadia Code",monospace;white-space:pre-wrap;word-break:break-word;background:#fff;border:1px solid var(--line);border-radius:7px;padding:8px;max-height:240px;overflow:auto;margin-top:5px}
+  .tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:20px;border:1px solid var(--line);color:var(--dim)}
+  .tag.ok{background:#E1F5EE;border-color:#9FE1CB;color:var(--ok)}
+  .tag.bad{background:#FCEBEB;border-color:#F5C4C4;color:var(--bad)}
+  .tag.warn{background:#FAEEDA;border-color:#FAC775;color:var(--warn)}
+  .err{color:var(--bad);font-size:12.5px}
+  .note{font-size:12.5px;color:var(--warn);background:#FAEEDA;border:1px solid #FAC775;border-radius:8px;padding:8px 12px;margin-top:10px}
+  .ans{background:#E1F5EE;border:1px solid #9FE1CB;border-radius:9px;padding:11px 13px;font-size:14px;color:#0B4F3D}
+  .bar{height:6px;background:#eceae5;border-radius:4px;overflow:hidden;margin-top:8px}
+  .bar > i{display:block;height:100%;background:var(--accent);transition:width .25s}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Unit 34 · Agent Loop 实验台</h1>
+  <div class="sub">while 循环只有二十行，难的是什么时候停 —— 点「走一步」，看 trace 一步步长出来</div>
+
+  <div class="banner" id="health">探测后端…</div>
+
+  <div class="card">
+    <div class="row">
+      <input id="q" style="flex:1" value="上海出差要带伞吗">
+      <input id="max" type="number" min="1" max="12" value="6" style="width:80px" title="max_steps">
+      <button class="primary" onclick="start()">开一个会话</button>
+      <button onclick="quick('北京出差要带伞吗')">晴天（2 步）</button>
+      <button onclick="quick('广州出差要带伞吗')">中雨（3 步）</button>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <button id="stepBtn" onclick="step()" disabled>走一步 ▶</button>
+      <button id="allBtn" onclick="runAll()" disabled>一次跑完</button>
+      <span id="status" style="font-size:12.5px;color:var(--dim)"></span>
+    </div>
+    <div class="bar"><i id="bar" style="width:0%"></i></div>
+    <div id="answer" style="margin-top:12px"></div>
+  </div>
+
+  <div class="card">
+    <h2>trace 时间线（每一步都是一个 model 或 tool 事件）</h2>
+    <div id="trace"><span style="color:var(--dim);font-size:13px">还没有开始</span></div>
+  </div>
+
+  <div class="card">
+    <h2>messages（循环真正在维护的东西）</h2>
+    <details><summary style="cursor:pointer;font-size:12.5px;color:var(--dim)">展开完整 JSON</summary><pre id="msgs"></pre></details>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+async function j(path, opt) {
+  const r = await fetch(path, opt);
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.detail || ("HTTP " + r.status));
+  return d;
+}
+const post = (p, body) => j(p, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+
+let sid = null, last = null;
+
+async function boot() {
+  try {
+    const h = await j("health");
+    $("health").className = "banner ok";
+    $("health").textContent = `后端就绪 · 工具：${h.tools.join(" / ")} · 默认 max_steps=${h.max_steps}`;
+    await start();
+  } catch (e) {
+    $("health").className = "banner bad";
+    $("health").textContent = "后端没响应：" + e.message;
+  }
+}
+
+function quick(t) { $("q").value = t; start(); }
+
+async function start() {
+  try {
+    const d = await post("session", { question: $("q").value.trim(), max_steps: Number($("max").value) || 6 });
+    sid = d.id; last = d.state;
+    $("trace").innerHTML = `<span style="color:var(--dim);font-size:13px">会话 ${esc(sid)} 已创建，还没有任何一步</span>`;
+    $("answer").innerHTML = "";
+    render();
+  } catch (e) {
+    $("trace").innerHTML = `<div class="err">失败：${esc(e.message)}</div>`;
+  }
+}
+
+async function step() {
+  if (!sid) return;
+  try {
+    last = (await post(`session/${sid}/step`)).state;
+    render();
+  } catch (e) { $("trace").innerHTML = `<div class="err">失败：${esc(e.message)}</div>`; }
+}
+
+async function runAll() {
+  if (!sid) return;
+  try {
+    while (!last.stopped) { last = (await post(`session/${sid}/step`)).state; render(); }
+  } catch (e) { $("trace").innerHTML = `<div class="err">失败：${esc(e.message)}</div>`; }
+}
+
+function render() {
+  const s = last;
+  $("stepBtn").disabled = !!s.stopped;
+  $("allBtn").disabled = !!s.stopped;
+  $("status").innerHTML = `第 ${s.steps} / ${s.max_steps} 步
+    ${s.stopped ? `<span class="tag ${s.stopped === "answer" ? "ok" : "warn"}">停止：${esc(s.stopped)}</span>` : '<span class="tag">进行中</span>'}`;
+  $("bar").style.width = Math.min(100, s.steps / s.max_steps * 100) + "%";
+
+  $("trace").innerHTML = s.trace.map(t => {
+    if (t.type === "tool") {
+      return `<div class="step tool"><div class="hd"><span class="tag ok">tool</span> 第 ${t.step} 步
+        <b>${esc(t.tool)}</b><span class="mono">${esc(JSON.stringify(t.args))}</span>
+        ${t.ok ? "" : '<span class="tag bad">报错</span>'}</div>
+        <div style="font-size:12.5px;color:var(--dim)">结果摘要：${esc(t.digest)}</div></div>`;
+    }
+    const called = t.tool_calls && t.tool_calls.length;
+    const d = t.decision === "call_tools" ? `<span class="tag">调用工具 ${called} 个</span>`
+      : t.decision === "answer" ? `<span class="tag ok">收尾</span>`
+      : `<span class="tag bad">空转 → 停</span>`;
+    return `<div class="step model"><div class="hd"><span class="tag">model</span> 第 ${t.step} 步 ${d}</div>
+      ${t.content ? `<div style="font-size:13px">${esc(t.content)}</div>` : ""}
+      ${called ? `<pre>${esc(t.tool_calls.map(c => `${c.name}(${c.arguments})`).join("\n"))}</pre>` : ""}</div>`;
+  }).join("") || `<span style="color:var(--dim);font-size:13px">还没有任何一步</span>`;
+
+  $("msgs").textContent = JSON.stringify(s.messages, null, 2);
+  if (s.stopped === "answer") {
+    $("answer").innerHTML = `<div class="ans"><b>最终回答：</b>${esc(s.answer)}</div>`;
+  } else if (s.stopped === "max_steps") {
+    $("answer").innerHTML = `<div class="banner warn">触顶停下：${esc(s.answer)} —— 注意最后一步的工具仍然执行了，
+      否则 messages 会停在「有 tool_calls 没有 tool 消息」的非法态。</div>`;
+  } else {
+    $("answer").innerHTML = "";
+  }
+}
+
+boot();
+</script>
+</body>
+</html>

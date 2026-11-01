@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Unit 26 · Reranker 实验台</title>
+<style>
+  :root{--bg:#f7f7f5;--card:#fff;--line:#e3e2de;--text:#23231f;--dim:#7a7972;--accent:#185FA5;--ok:#0F6E56;--bad:#A32D2D;--warn:#854F0B}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font:14px/1.65 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;padding:20px}
+  .wrap{max-width:1040px;margin:0 auto}
+  h1{font-size:19px;font-weight:600}h2{font-size:13px;font-weight:600;color:var(--dim);margin-bottom:11px;letter-spacing:.02em}
+  .sub{color:var(--dim);font-size:13px;margin:4px 0 16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:15px;margin-bottom:14px}
+  button{padding:7px 13px;border:1px solid var(--line);border-radius:7px;background:#fff;font:inherit;font-size:13px;cursor:pointer;color:var(--text)}
+  button:hover{background:#f0efec}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  input{padding:8px 11px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:13.5px;background:#fff;color:var(--text)}
+  .row{display:flex;gap:8px;align-items:center}
+  .banner{padding:9px 13px;border-radius:8px;font-size:13px;margin-bottom:14px;border:1px solid var(--line);background:var(--card)}
+  .banner.ok{border-color:#9FE1CB;background:#E1F5EE;color:var(--ok)}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .item{padding:8px 0;border-bottom:1px solid var(--line)}
+  .item:last-child{border:0}
+  .item .tx{font-size:12.5px}
+  .item .meta{display:flex;gap:6px;margin-top:5px;flex-wrap:wrap}
+  .tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:20px;border:1px solid var(--line);color:var(--dim)}
+  .tag.up{color:var(--ok);border-color:#9FE1CB;background:#E1F5EE}
+  .tag.down{color:var(--bad);border-color:#F5C4C4;background:#FCEBEB}
+  .num{font-variant-numeric:tabular-nums;color:var(--dim);font-size:12px}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th,td{text-align:left;padding:6px 7px;border-bottom:1px solid var(--line)}
+  th{font-size:11.5px;color:var(--dim)}
+  td.r{text-align:right;font-variant-numeric:tabular-nums}
+  .note{font-size:12.5px;color:var(--warn);background:#FAEEDA;border:1px solid #FAC775;border-radius:8px;padding:8px 12px;margin-top:10px}
+  .err{color:var(--bad);font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Unit 26 · Reranker 实验台</h1>
+  <div class="sub">向量召回 Top-20 → BM25 重排 Top-5，看谁被顶上来、谁被挤下去</div>
+
+  <div class="banner" id="health">探测后端…</div>
+
+  <div class="card">
+    <h2>① 一个问题，两组排名</h2>
+    <div class="row">
+      <input id="q" style="flex:1" value="账号密码输错几次会被锁，锁了找谁解锁？">
+      <button class="primary" onclick="run()">召回 + 重排</button>
+      <button onclick="cmp()">评测集对比</button>
+    </div>
+    <div id="out"></div>
+  </div>
+
+  <div id="cmpOut"></div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+async function post(path, body) {
+  const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : "{}" });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.detail || ("HTTP " + r.status));
+  return d;
+}
+async function loadHealth() {
+  try {
+    const h = await (await fetch("health")).json();
+    $("health").className = "banner ok";
+    $("health").textContent = `${h.chunks} 条语料（含 ${h.stuffed} 条关键词堆砌页） · 向量 ${h.embedder} · 重排 ${h.reranker}`;
+  } catch (e) {
+    $("health").className = "banner warn";
+    $("health").textContent = "后端没响应：" + e.message;
+  }
+}
+function list(items, key) {
+  return items.map((x, i) => {
+    const moved = key === "rr" ? (x.vector_rank - x.rerank_rank) : 0;
+    const tag = moved > 0 ? `<span class="tag up">↑${moved}</span>` : moved < 0 ? `<span class="tag down">↓${-moved}</span>` : "";
+    const shown = key === "vec" ? x.vector_rank : x.rerank_rank;
+    return `<div class="item">
+      <div class="tx"><b>${shown}.</b> ${esc(x.text)}</div>
+      <div class="meta"><span class="tag">${x.chunk_id}</span>${tag}
+        <span class="num">向量 #${x.vector_rank} · 重排 #${x.rerank_rank}</span></div>
+    </div>`;
+  }).join("");
+}
+async function run() {
+  try {
+    const d = await post("rerank", { query: $("q").value.trim(), top_k: 5 });
+    $("out").innerHTML = `<div class="cols" style="margin-top:12px">
+      <div><h2>向量召回（双塔，各自编码）</h2>${list(d.vector_top, "vec")}</div>
+      <div><h2>BM25 重排（query+doc 一起看）</h2>${list(d.reranked_top, "rr")}</div></div>`;
+  } catch (e) {
+    $("out").innerHTML = `<div class="err">失败：${esc(e.message)}</div>`;
+  }
+}
+async function cmp() {
+  try {
+    const d = await post("compare", null);
+    $("cmpOut").innerHTML = `<div class="card">
+      <h2>评测集 · ${d.n} 题 · Top-${d.top_k}</h2>
+      <div class="cols" style="margin-bottom:10px">
+        <div>短问题 MRR <b>${d.short.mrr_before.toFixed(2)} → ${d.short.mrr_after.toFixed(2)}</b></div>
+        <div>长问题 MRR <b>${d.long.mrr_before.toFixed(2)} → ${d.long.mrr_after.toFixed(2)}</b></div>
+      </div>
+      <table><thead><tr><th>组</th><th>问题</th><th>向量首条</th><th>重排首条</th><th class="r">MRR</th><th class="r">nDCG</th></tr></thead>
+      <tbody>${d.details.map(x => `<tr>
+        <td><span class="tag">${x.kind}</span></td>
+        <td>${esc(x.q)}</td>
+        <td style="font-family:ui-monospace,monospace">${x.vector[0] || "—"}</td>
+        <td style="font-family:ui-monospace,monospace">${x.reranked[0] || "—"}</td>
+        <td class="r">${x.mrr_before.toFixed(2)} → <b>${x.mrr_after.toFixed(2)}</b></td>
+        <td class="r">${x.ndcg_before.toFixed(2)} → ${x.ndcg_after.toFixed(2)}</td>
+      </tr>`).join("")}</tbody></table>
+      <div class="note">短问题重排基本不动（向量已经排对）；长问题里重排能救回来，因为一句话里混了几个意图，向量被平均掉了。
+        但「退款多久到账」那种被关键词堆砌页骗到的，BM25 也救不了 —— 字面重排的天花板就在这里。</div>
+    </div>`;
+  } catch (e) {
+    $("cmpOut").innerHTML = `<div class="err">评测失败：${esc(e.message)}</div>`;
+  }
+}
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+loadHealth();
+run();
+</script>
+</body>
+</html>

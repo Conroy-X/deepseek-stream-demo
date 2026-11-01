@@ -1,0 +1,13 @@
+[project]
+name = "unit31-function-calling"
+version = "0.1.0"
+description = "Unit 31：Function Calling，tool_calls 解析 / 参数校验 / 执行 / role=tool 回填"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi[standard]>=0.115",
+    "httpx>=0.27",
+    "python-dotenv>=1.0",
+]
+
+[tool.uv]
+package = false

@@ -1,0 +1,13 @@
+[project]
+name = "unit24-embedding-pipeline"
+version = "0.1.0"
+description = "Unit 24：批量 embedding、限流重试、断点续跑、token 与成本台账"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi[standard]>=0.115",
+    "httpx>=0.27",
+    "python-dotenv>=1.0",
+]
+
+[tool.uv]
+package = false

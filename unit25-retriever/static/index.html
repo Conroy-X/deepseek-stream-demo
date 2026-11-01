@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Unit 25 · Retriever 实验台</title>
+<style>
+  :root{--bg:#f7f7f5;--card:#fff;--line:#e3e2de;--text:#23231f;--dim:#7a7972;--accent:#185FA5;--ok:#0F6E56;--bad:#A32D2D;--warn:#854F0B}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font:14px/1.65 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;padding:20px}
+  .wrap{max-width:1040px;margin:0 auto}
+  h1{font-size:19px;font-weight:600}h2{font-size:13px;font-weight:600;color:var(--dim);margin-bottom:11px;letter-spacing:.02em}
+  .sub{color:var(--dim);font-size:13px;margin:4px 0 16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:15px;margin-bottom:14px}
+  button{padding:7px 13px;border:1px solid var(--line);border-radius:7px;background:#fff;font:inherit;font-size:13px;cursor:pointer;color:var(--text)}
+  button:hover{background:#f0efec}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{background:#0C447C}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  input,select{width:100%;padding:8px 11px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:13.5px;background:#fff;color:var(--text)}
+  .ctrls{display:grid;grid-template-columns:1.6fr .8fr .9fr 1fr;gap:10px;margin-bottom:10px}
+  .ctrls label{font-size:12px;color:var(--dim);display:block;margin-bottom:4px}
+  .banner{padding:9px 13px;border-radius:8px;font-size:13px;margin-bottom:14px;border:1px solid var(--line);background:var(--card)}
+  .banner.ok{border-color:#9FE1CB;background:#E1F5EE;color:var(--ok)}
+  .banner.warn{border-color:#FAC775;background:#FAEEDA;color:var(--warn)}
+  .hit{display:flex;gap:11px;align-items:flex-start;padding:9px 0;border-bottom:1px solid var(--line)}
+  .hit:last-child{border:0}
+  .hit .rank{font-size:11.5px;color:var(--dim);width:20px;flex:none}
+  .hit .txt{font-size:13.5px}
+  .hit .mini{height:5px;background:#f0efec;border-radius:5px;margin-top:6px;overflow:hidden}
+  .hit .mini i{display:block;height:100%;background:var(--accent);border-radius:5px}
+  .hit .sc{font-size:12px;color:var(--dim);width:56px;text-align:right;flex:none;font-variant-numeric:tabular-nums}
+  .tag{display:inline-block;font-size:11.5px;padding:1px 7px;border-radius:20px;border:1px solid var(--line);color:var(--dim)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line)}
+  th{font-size:12px;color:var(--dim);font-weight:600}
+  td.num{text-align:right;font-variant-numeric:tabular-nums}
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  .kpi{border:1px solid var(--line);border-radius:9px;padding:10px 12px}
+  .kpi b{display:block;font-size:22px;font-weight:600}
+  .kpi span{font-size:12px;color:var(--dim)}
+  .err{color:var(--bad);font-size:12.5px}
+  .note{font-size:12.5px;color:var(--warn);background:#FAEEDA;border:1px solid #FAC775;border-radius:8px;padding:8px 12px;margin-top:10px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Unit 25 · Retriever 实验台</h1>
+  <div class="sub">一个入口：租户隔离 + 元数据过滤 + 阈值 + 评测指标</div>
+
+  <div class="banner" id="health">探测后端…</div>
+
+  <div class="card">
+    <h2>① 检索</h2>
+    <div class="ctrls">
+      <div><label>query</label><input id="q" value="年假要提前几天申请"></div>
+      <div><label>tenant</label>
+        <select id="tenant"><option>acme</option><option>beta</option></select>
+      </div>
+      <div><label>top_k</label><input id="topk" type="number" value="5" min="1" max="50"></div>
+      <div><label>threshold</label><input id="th" type="number" value="0" step="0.05" min="0" max="1"></div>
+    </div>
+    <div class="ctrls">
+      <div><label>source（可空）</label><input id="source" placeholder="退款政策.md"></div>
+      <div><label>page_min</label><input id="pmin" type="number" placeholder="—"></div>
+      <div><label>page_max</label><input id="pmax" type="number" placeholder="—"></div>
+      <div style="display:flex;align-items:flex-end;gap:8px">
+        <button class="primary" onclick="run()" style="flex:1">检索</button>
+        <button onclick="evalNow()">评测</button>
+      </div>
+    </div>
+    <div id="out"></div>
+  </div>
+
+  <div class="card">
+    <h2>② 评测集（字面 vs 同义改写）</h2>
+    <div id="metrics"><div class="err">点「评测」跑一遍</div></div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+async function post(path, body) {
+  const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : "{}" });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.detail || ("HTTP " + r.status));
+  return d;
+}
+async function loadHealth() {
+  try {
+    const h = await (await fetch("health")).json();
+    $("health").className = "banner ok";
+    $("health").textContent = `acme ${h.acme} 条 · beta ${h.beta} 条 · 向量后端 ${h.embedder} · 评测题 ${h.eval_questions} 道`;
+  } catch (e) {
+    $("health").className = "banner warn";
+    $("health").textContent = "后端没响应：" + e.message;
+  }
+}
+function num(v) { return v === "" ? null : +v; }
+async function run() {
+  try {
+    const d = await post("search", {
+      tenant: $("tenant").value, query: $("q").value.trim(),
+      top_k: +$("topk").value, threshold: +$("th").value,
+      source: $("source").value.trim() || null,
+      page_min: num($("pmin").value), page_max: num($("pmax").value)
+    });
+    if (!d.hits.length) {
+      $("out").innerHTML = `<div class="note">没有命中。阈值 ${d.threshold} 下一条都没过线 —— 这正是"宁可不答"该有的样子。</div>`;
+      return;
+    }
+    const max = Math.max(...d.hits.map(h => h.score), 0.0001);
+    $("out").innerHTML = `<div style="margin-top:10px">${d.hits.map((h, i) => `
+      <div class="hit">
+        <div class="rank">${i + 1}</div>
+        <div style="flex:1">
+          <div class="txt">${esc(h.text)}</div>
+          <div class="mini"><i style="width:${Math.max(2, h.score / max * 100)}%"></i></div>
+          <div style="margin-top:5px"><span class="tag">${esc(h.source)}</span> <span class="tag">第 ${h.page} 页</span> <span class="tag">${h.chunk_id}</span></div>
+        </div>
+        <div class="sc">${h.score.toFixed(3)}</div>
+      </div>`).join("")}</div>`;
+  } catch (e) {
+    $("out").innerHTML = `<div class="err">检索失败：${esc(e.message)}</div>`;
+  }
+}
+async function evalNow() {
+  try {
+    const d = await post("eval?top_k=5&threshold=0", null);
+    const kpi = (label, m) => `<div class="kpi"><b>${m.recall.toFixed(2)}</b><span>${label} recall@5 · MRR ${m.mrr.toFixed(2)} · n=${m.n}</span></div>`;
+    $("metrics").innerHTML = `
+      <div class="grid3">${kpi("字面提问", d.literal)}${kpi("同义改写", d.paraphrase)}${kpi("总体", d.overall)}</div>
+      <table style="margin-top:12px"><thead><tr><th>类型</th><th>问题</th><th>召回前 3</th><th class="num">recall</th><th class="num">MRR</th></tr></thead>
+      <tbody>${d.details.map(x => `<tr>
+        <td><span class="tag">${x.kind}</span></td><td>${esc(x.q)}</td>
+        <td style="font-family:ui-monospace,monospace;font-size:12px">${x.retrieved.slice(0,3).join(", ") || "—"}</td>
+        <td class="num" style="color:${x.recall >= 0.99 ? "var(--ok)" : x.recall > 0 ? "var(--warn)" : "var(--bad)"}">${x.recall.toFixed(2)}</td>
+        <td class="num">${x.mrr.toFixed(2)}</td>
+      </tr>`).join("")}</tbody></table>
+      <div class="note">字面提问几乎全中，是因为本地哈希向量只做字面匹配，题干和正文的词几乎重合。
+        换成同义改写（「出差回来多久内要贴票」）就掉到 0 —— 这不是 bug，是字面向量的能力边界。</div>`;
+  } catch (e) {
+    $("metrics").innerHTML = `<div class="err">评测失败：${esc(e.message)}</div>`;
+  }
+}
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+loadHealth();
+run();
+</script>
+</body>
+</html>

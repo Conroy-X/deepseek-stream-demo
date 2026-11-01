@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Unit 60 · 项目 4 交付</title>
+<style>
+  :root{--bg:#f7f7f5;--card:#fff;--line:#e3e2de;--text:#23231f;--dim:#7a7972;
+        --accent:#185FA5;--ok:#0F6E56;--bad:#A32D2D;--warn:#854F0B}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:14px/1.65 -apple-system,"Segoe UI","Noto Sans CJK SC",sans-serif}
+  header{padding:26px 30px 18px;border-bottom:1px solid var(--line);background:var(--card)}
+  h1{margin:0 0 6px;font-size:19px;font-weight:650}
+  header p{margin:0;color:var(--dim);font-size:13px;max-width:780px}
+  main{max-width:1100px;margin:0 auto;padding:22px 30px 60px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px 20px;margin-bottom:16px}
+  .card h2{margin:0 0 4px;font-size:14px;font-weight:650}
+  .card .sub{color:var(--dim);font-size:12.5px;margin:0 0 14px}
+  .tag{display:inline-block;padding:1px 7px;border-radius:5px;font-size:11.5px;background:#eef2f7;color:var(--accent);margin-right:6px}
+  .tag.ok{background:#e8f3ef;color:var(--ok)}
+  .tag.bad{background:#fbecec;color:var(--bad)}
+  .banner{background:#e8f3ef;border:1px solid #cfe4db;color:var(--ok);padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:16px;display:none}
+  .banner.bad{background:#fbecec;border-color:#f0cfcf;color:var(--bad)}
+  .banner.warn{background:#fbf1e3;border-color:#eee0c8;color:var(--warn)}
+  pre{margin:0;background:#1e1e1c;color:#e6e4dd;padding:12px 14px;border-radius:8px;font:12px/1.55 ui-monospace,Menlo,monospace;overflow:auto;max-height:300px;white-space:pre-wrap;word-break:break-word}
+  button{font:inherit;font-size:12.5px;padding:6px 13px;border-radius:7px;cursor:pointer;border:1px solid var(--line);background:#fff;color:var(--text)}
+  button:hover{border-color:#c9c8c2}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  input{font:inherit;font-size:12.5px;padding:5px 8px;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--text);width:100%}
+  .chains{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+  .chain{padding:5px 10px;border:1px solid var(--line);border-radius:7px;font-size:12px;background:#fcfcfb}
+  .foot{color:var(--dim);font-size:12px;text-align:center;padding-top:8px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Unit 60 · 项目 4 交付：MCP Database Agent</h1>
+  <p>五条链拧成一条：schema 注入 → NL→SQL → 四道安全闸 → 错误重试 → 结构化日志。</p>
+</header>
+<main>
+  <div class="banner" id="banner"></div>
+  <section class="card">
+    <h2>五条链</h2>
+    <div class="chains">
+      <div class="chain">schema</div>
+      <div class="chain">→</div>
+      <div class="chain">NL→SQL</div>
+      <div class="chain">→</div>
+      <div class="chain">四道闸</div>
+      <div class="chain">→</div>
+      <div class="chain">错误重试</div>
+      <div class="chain">→</div>
+      <div class="chain">结构化日志</div>
+    </div>
+  </section>
+  <section class="card">
+    <h2>端到端 Demo</h2>
+    <p class="sub">输入自然语言问题，选租户，看完整链路。</p>
+    <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+      <input id="q" value="销售额排名" style="flex:1;min-width:200px">
+      <select id="tenant" style="font:inherit;font-size:12.5px;padding:5px 8px;border:1px solid var(--line);border-radius:6px">
+        <option value="t-acme">t-acme</option>
+        <option value="t-globex">t-globex</option>
+      </select>
+      <button class="primary" id="btnAsk">问</button>
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+      <button data-q="销售额排名">销售额排名</button>
+      <button data-q="订单状态">订单状态</button>
+      <button data-q="客户列表">客户列表</button>
+    </div>
+    <pre id="askOut" style="min-height:100px">点「问」。</pre>
+  </section>
+  <section class="card">
+    <h2>攻击拦截 + 跨租户</h2>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="primary" id="btnAttacks">4 条攻击</button>
+      <button id="btnCross">跨租户隔离</button>
+      <button id="btnLogs">最近日志</button>
+    </div>
+    <pre id="secOut" style="margin-top:10px;min-height:80px">点按钮。</pre>
+  </section>
+  <div class="foot">8060 · 离线自检见 <code>python main.py</code> · 交付文档：ARCHITECTURE.md / SECURITY.md / DEMO.md</div>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function banner(m,k){const e=$('banner');e.textContent=m;e.className='banner'+(k?' '+k:'');e.style.display=m?'block':'none';}
+async function getJSON(u,o){const r=await fetch(u,o);if(!r.ok)throw new Error(u+' → '+r.status);return r.json();}
+$('btnAsk').onclick=async()=>{try{const d=await getJSON('/api/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:$('q').value,tenant:$('tenant').value})});$('askOut').textContent=JSON.stringify(d,null,2);banner(d.answer?'查询成功':'查询失败',d.answer?'ok':'warn');}catch(e){banner(e.message,'bad');}};
+document.querySelectorAll('[data-q]').forEach(b=>b.onclick=()=>$('q').value=b.dataset.q);
+$('btnAttacks').onclick=async()=>{try{const d=await getJSON('/api/attacks');$('secOut').textContent=d.attacks.map(a=>`${a.label}: ${a.blocked?'拦':'放行'} — ${esc(a.reason)}`).join('\n');banner('4 条全被拦','ok');}catch(e){banner(e.message,'bad');}};
+$('btnCross').onclick=async()=>{try{const d=await getJSON('/api/cross-tenant');$('secOut').textContent=JSON.stringify(d,null,2);banner(`A 看到 ${d.acme_rows.length} 笔，G 看到 ${d.globex_rows.length} 笔，A 看不到 G：${!d.acme_sees_globex}`,'ok');}catch(e){banner(e.message,'bad');}};
+$('btnLogs').onclick=async()=>{try{const d=await getJSON('/api/logs');$('secOut').textContent=JSON.stringify(d.logs,null,2);banner(`共 ${d.total} 条日志`,'ok');}catch(e){banner(e.message,'bad');}};
+</script>
+</body>
+</html>

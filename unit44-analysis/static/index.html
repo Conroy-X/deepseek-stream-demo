@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Unit 44 · 多来源交叉比对 实验台</title>
+<style>
+  :root{--bg:#f7f7f5;--card:#fff;--line:#e3e2de;--text:#23231f;--dim:#7a7972;--accent:#185FA5;--ok:#0F6E56;--bad:#A32D2D;--warn:#854F0B}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font:14px/1.65 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;padding:20px}
+  .wrap{max-width:1100px;margin:0 auto}
+  h1{font-size:19px;font-weight:600}
+  h2{font-size:13px;font-weight:600;color:var(--dim);margin-bottom:11px}
+  .sub{color:var(--dim);font-size:13px;margin:4px 0 16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:15px;margin-bottom:14px}
+  button{padding:7px 13px;border:1px solid var(--line);border-radius:7px;background:#fff;font:inherit;font-size:13px;cursor:pointer;color:var(--text)}
+  button:hover{background:#f0efec}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  textarea{width:100%;min-height:90px;padding:8px 11px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:13.5px;background:#fff;color:var(--text);resize:vertical}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .banner{padding:9px 13px;border-radius:8px;font-size:13px;margin-bottom:14px;border:1px solid var(--line);background:var(--card)}
+  .banner.ok{border-color:#9FE1CB;background:#E1F5EE;color:var(--ok)}
+  .banner.bad{border-color:#F5C4C4;background:#FCEBEB;color:var(--bad)}
+  .cols{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  .col{border:1px solid var(--line);border-radius:9px;padding:10px;background:#fbfbf9;font-size:13px}
+  .col .h{font-weight:600;font-size:13.5px;margin-bottom:6px;color:var(--accent)}
+  .col pre{white-space:pre-wrap;word-break:break-word;font:12.5px/1.7 ui-monospace,"Cascadia Code",monospace;background:#fff;border:1px solid var(--line);border-radius:6px;padding:6px 9px;margin-top:5px;max-height:140px;overflow:auto}
+  .conflict{border:1px solid #F5C4C4;background:#FCEBEB;border-radius:9px;padding:10px 12px;margin-bottom:8px}
+  .conflict .h{color:var(--bad);font-weight:600;font-size:13.5px}
+  .conflict .v{display:flex;gap:14px;flex-wrap:wrap;margin-top:6px;font-size:13px}
+  .conflict .v .item{background:#fff;border:1px solid #F5C4C4;border-radius:6px;padding:4px 9px}
+  .consensus{border:1px solid #9FE1CB;background:#E1F5EE;border-radius:9px;padding:10px 12px;margin-bottom:8px}
+  .consensus .h{color:var(--ok);font-weight:600;font-size:13.5px}
+  .unique{border:1px solid #FAC775;background:#FAEEDA;border-radius:9px;padding:10px 12px;margin-bottom:8px}
+  .unique .h{color:var(--warn);font-weight:600;font-size:13.5px}
+  .tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:20px;border:1px solid var(--line);color:var(--dim)}
+  .tag.ok{background:#E1F5EE;border-color:#9FE1CB;color:var(--ok)}
+  .tag.bad{background:#FCEBEB;border-color:#F5C4C4;color:var(--bad)}
+  .tag.warn{background:#FAEEDA;border-color:#FAC775;color:var(--warn)}
+  .err{color:var(--bad);font-size:12.5px}
+  .empty{color:var(--dim);font-size:13px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Unit 44 · 多来源交叉比对 实验台</h1>
+  <div class="sub">3 个来源对同一主题的不同描述 · 冲突高亮 · 共识列表 · 补充点单独标</div>
+
+  <div class="banner" id="health">探测后端…</div>
+
+  <div class="card">
+    <h2>三个来源（编辑后再比对）</h2>
+    <div class="cols">
+      <div class="col">
+        <div class="h">A · RAG 实测</div>
+        <textarea id="srcA"></textarea>
+      </div>
+      <div class="col">
+        <div class="h">B · 另一项实测</div>
+        <textarea id="srcB"></textarea>
+      </div>
+      <div class="col">
+        <div class="h">C · 延迟补充</div>
+        <textarea id="srcC"></textarea>
+      </div>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <button class="primary" onclick="doCompare()">交叉比对</button>
+      <button onclick="loadDefault()">重载默认</button>
+      <span id="stat" style="font-size:12.5px;color:var(--dim)"></span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>结果：共识 / 冲突 / 补充</h2>
+    <div id="out"><span class="empty">还没有比对</span></div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+async function j(path, opt) {
+  const r = await fetch(path, opt);
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.detail || ("HTTP " + r.status));
+  return d;
+}
+const post = (p, body) => j(p, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+
+let DEFAULTS = null;
+
+async function boot() {
+  try {
+    const h = await j("health");
+    $("health").className = "banner ok";
+    $("health").textContent = `后端就绪 · 默认 fixture ${h.default_sources_count} 个来源 · 已知主题：${h.topics_known.join(" / ")}`;
+    const sd = await j("sources");
+    DEFAULTS = sd.items;
+    loadDefault();
+  } catch (e) {
+    $("health").className = "banner bad";
+    $("health").textContent = "后端没响应：" + e.message;
+  }
+}
+
+function loadDefault() {
+  if (!DEFAULTS) return;
+  $("srcA").value = DEFAULTS[0].text;
+  $("srcB").value = DEFAULTS[1].text;
+  $("srcC").value = DEFAULTS[2].text;
+  doCompare();
+}
+
+async function doCompare() {
+  const sources = [
+    { name: "A · RAG 实测", text: $("srcA").value },
+    { name: "B · 另一项实测", text: $("srcB").value },
+    { name: "C · 延迟补充", text: $("srcC").value },
+  ];
+  if (sources.some(s => !s.text.trim())) {
+    $("out").innerHTML = `<div class="err">三个来源都不能为空</div>`;
+    return;
+  }
+  try {
+    const d = await post("compare", { sources });
+    $("stat").textContent = `主题=${d.topic} · 共识 ${d.consensus.length} / 冲突 ${d.conflicts.length} / 补充 ${d.unique_points.length}`;
+    let html = "";
+    if (d.consensus.length === 0 && d.conflicts.length === 0 && d.unique_points.length === 0) {
+      html = `<div class="empty">没有任何可比较的内容（来源主题不同或都没有数值）</div>`;
+    }
+    d.consensus.forEach(c => {
+      html += `<div class="consensus"><div class="h">共识 · ${esc(c.claim)}</div>
+        <div style="font-size:12.5px;color:var(--dim);margin-top:4px">来源：${c.sources.map(s => `<span class="tag ok">${esc(s)}</span>`).join(" ")}</div></div>`;
+    });
+    d.conflicts.forEach(c => {
+      html += `<div class="conflict"><div class="h">冲突 · ${esc(c.claim)}</div>
+        <div class="v">${c.values.map(v => `<div class="item"><b>${v.value}</b> ← ${v.sources.map(s => `<span class="tag bad">${esc(s)}</span>`).join(" ")}</div>`).join("")}</div></div>`;
+    });
+    d.unique_points.forEach(u => {
+      html += `<div class="unique"><div class="h">补充 · ${esc(u.claim)}</div>
+        <div style="font-size:12.5px;color:var(--dim);margin-top:4px">仅 <span class="tag warn">${esc(u.source)}</span></div></div>`;
+    });
+    $("out").innerHTML = html || `<div class="empty">没有冲突也没有共识</div>`;
+  } catch (e) {
+    $("out").innerHTML = `<div class="err">失败：${esc(e.message)}</div>`;
+  }
+}
+
+boot();
+</script>
+</body>
+</html>

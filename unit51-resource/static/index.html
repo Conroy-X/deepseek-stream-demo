@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Unit 51 · Resource 浏览台</title>
+<style>
+  :root{--bg:#f7f7f5;--card:#fff;--line:#e3e2de;--text:#23231f;--dim:#7a7972;--accent:#185FA5;--ok:#0F6E56;--bad:#A32D2D;--warn:#854F0B}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font:14px/1.65 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;padding:20px}
+  .wrap{max-width:1080px;margin:0 auto}
+  h1{font-size:19px;font-weight:600}
+  h2{font-size:13px;font-weight:600;color:var(--dim);margin-bottom:11px;letter-spacing:.02em}
+  .sub{color:var(--dim);font-size:13px;margin:4px 0 16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:15px;margin-bottom:14px}
+  button{padding:7px 13px;border:1px solid var(--line);border-radius:7px;background:#fff;font:inherit;font-size:13px;cursor:pointer;color:var(--text)}
+  button:hover{background:#f0efec}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{background:#0C447C}
+  button.mini{padding:3px 9px;font-size:12px}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .banner{padding:9px 13px;border-radius:8px;font-size:13px;margin-bottom:14px;border:1px solid var(--line);background:var(--card)}
+  .banner.ok{border-color:#9FE1CB;background:#E1F5EE;color:var(--ok)}
+  .banner.warn{border-color:#FAC775;background:#FAEEDA;color:var(--warn)}
+  .banner.bad{border-color:#F7C1C1;background:#FCEBEB;color:var(--bad)}
+  .grid{display:grid;grid-template-columns:320px 1fr;gap:14px;align-items:start}
+  @media (max-width:900px){.grid{grid-template-columns:1fr}}
+  .tag{display:inline-block;font-size:11.5px;padding:1px 7px;border-radius:20px;border:1px solid var(--line);color:var(--dim)}
+  .tag.ok{border-color:#9FE1CB;background:#E1F5EE;color:var(--ok)}
+  .tag.bad{border-color:#F7C1C1;background:#FCEBEB;color:var(--bad)}
+  .tag.warn{border-color:#FAC775;background:#FAEEDA;color:var(--warn)}
+  .item{border:1px solid var(--line);border-radius:8px;padding:9px 11px;margin-bottom:8px;cursor:pointer;background:#fff}
+  .item:hover{border-color:#c9c8c3}
+  .item.on{border-color:var(--accent);background:#F2F7FC}
+  .item b{display:block;font-size:13px;margin-bottom:3px}
+  .item .u{font:11.5px/1.5 ui-monospace,Consolas,monospace;color:var(--dim);word-break:break-all}
+  input{width:100%;padding:7px 10px;border:1px solid var(--line);border-radius:7px;font:13px ui-monospace,Consolas,monospace;background:#fff}
+  pre{background:#fbfbf9;border:1px solid var(--line);border-radius:8px;padding:10px;font:12px/1.6 ui-monospace,Consolas,monospace;overflow:auto;white-space:pre-wrap;word-break:break-word;max-height:200px}
+  .ph{color:var(--dim);font-size:13px}
+  .note{font-size:12.5px;color:var(--warn);background:#FAEEDA;border:1px solid #FAC775;border-radius:8px;padding:8px 12px;margin-top:10px}
+  .note.ok{color:var(--ok);background:#E1F5EE;border-color:#9FE1CB}
+  .note.bad{color:var(--bad);background:#FCEBEB;border-color:#F7C1C1}
+  .doc{border:1px solid var(--line);border-radius:8px;padding:14px 16px;background:#fff;min-height:160px}
+  .doc h3{font-size:15px;margin:2px 0 10px}
+  .doc h4{font-size:13.5px;margin:14px 0 6px}
+  .doc p{margin:7px 0}
+  .doc ul,.doc ol{margin:7px 0 7px 20px}
+  .doc li{margin:3px 0}
+  .doc code{font:12px ui-monospace,Consolas,monospace;background:#f1f0ec;padding:1px 5px;border-radius:4px}
+  .meta{font:11.5px/1.6 ui-monospace,Consolas,monospace;color:var(--dim);margin-bottom:10px;word-break:break-all}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Unit 51 · Resource 浏览台</h1>
+  <div class="sub">左边是 <code>resources/list</code> 的结果（固定 URI + 模板），右边是 <code>resources/read</code> 的正文。
+    这个 server 一个 tool 都没有 —— 只读数据不需要「动作」。</div>
+
+  <div class="banner" id="health">探测后端…</div>
+
+  <div class="grid">
+    <div>
+      <div class="card">
+        <h2>① 固定 resource（2 个）</h2>
+        <div id="fixed"><span class="ph">加载中…</span></div>
+      </div>
+      <div class="card">
+        <h2>② 模板 resource（1 个）</h2>
+        <div id="tpl"><span class="ph">加载中…</span></div>
+        <label style="display:block;font-size:12.5px;margin:10px 0 4px;color:#7a7972">填 topic 读一个</label>
+        <input id="topic" value="onboarding">
+        <div class="row" style="margin-top:8px">
+          <button class="primary" onclick="readTpl()">读取 doc://kb/{topic}</button>
+        </div>
+        <div class="note">未知 topic 会让<b>客户端抛异常</b>，不是返回错误文本 —— 这就是 resource 不适合承载业务的证据。</div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <h2>③ 正文</h2>
+        <div class="row" style="margin-bottom:10px">
+          <span class="tag" id="mime">未读取</span>
+          <span class="ph" id="metaline"></span>
+        </div>
+        <div class="doc" id="doc"><span class="ph">点左边任意一项。</span></div>
+        <div id="hint"></div>
+      </div>
+
+      <div class="card">
+        <h2>④ 原始返回（contents 的字段）</h2>
+        <pre id="raw">—</pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+async function jfetch(path, opts) {
+  const r = await fetch(path, opts);
+  const d = await r.json().catch(() => ({}));
+  return { ok: r.ok, status: r.status, data: d };
+}
+
+// 极简 markdown：标题 / 列表 / 行内 code / 段落。够看文档就行，不引第三方。
+function md(text) {
+  const lines = String(text).split("\n");
+  let out = "", list = null;
+  const inline = s => esc(s)
+    .replace(/`([^`]+)`/g, (m, c) => `<code>${c}</code>`)
+    .replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
+  const closeList = () => { if (list) { out += `</${list}>`; list = null; } };
+  for (const line of lines) {
+    const h = line.match(/^(#{1,4})\s+(.*)$/);
+    const ul = line.match(/^[-*]\s+(.*)$/);
+    const ol = line.match(/^(\d+)\.\s+(.*)$/);
+    if (h) { closeList(); out += `<h${h[1].length + 2}>${inline(h[2])}</h${h[1].length + 2}>`; }
+    else if (ul) { if (list !== "ul") { closeList(); out += "<ul>"; list = "ul"; } out += `<li>${inline(ul[1])}</li>`; }
+    else if (ol) { if (list !== "ol") { closeList(); out += "<ol>"; list = "ol"; } out += `<li>${inline(ol[2])}</li>`; }
+    else if (line.trim() === "") { closeList(); }
+    else { closeList(); out += `<p>${inline(line)}</p>`; }
+  }
+  closeList();
+  return out;
+}
+
+let currentUri = "";
+
+async function loadHealth() {
+  const { data: h } = await jfetch("health");
+  if (!h || !h.server) { $("health").className = "banner bad"; $("health").textContent = "后端没响应"; return; }
+  $("health").className = "banner ok";
+  $("health").textContent = `${h.server.name} v${h.server.version} · 协议 ${h.server.protocol_version} · `
+    + `resource ${h.resource_count} · template ${h.template_count} · tool ${h.tool_count}（注意是 0）`;
+}
+
+async function loadList() {
+  const { data: d } = await jfetch("api/resources");
+  $("fixed").innerHTML = d.resources.map(r => `
+    <div class="item" data-uri="${esc(r.uri)}" onclick="readUri('${esc(r.uri)}')">
+      <b>${esc(r.name)}</b>
+      <div class="u">${esc(r.uri)}</div>
+      <div class="ph" style="font-size:12px;margin-top:4px">${esc(r.description)}</div>
+    </div>`).join("") || '<span class="ph">没有固定 resource。</span>';
+  $("tpl").innerHTML = d.templates.map(t => `
+    <div class="item">
+      <b>${esc(t.name)}</b>
+      <div class="u">${esc(t.uri_template)}</div>
+      <div class="ph" style="font-size:12px;margin-top:4px">${esc(t.description)}</div>
+    </div>`).join("") || '<span class="ph">没有模板。</span>';
+  if (d.topics && d.topics.length) $("topic").value = d.topics[0];
+}
+
+function markOn(uri) {
+  document.querySelectorAll(".item").forEach(el => el.classList.toggle("on", el.dataset.uri === uri));
+}
+
+async function readUri(uri) {
+  currentUri = uri;
+  markOn(uri);
+  $("doc").innerHTML = '<span class="ph">读取中…</span>';
+  const { data: d } = await jfetch("api/read", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ uri }),
+  });
+  render(d, uri);
+}
+
+async function readTpl() {
+  const t = $("topic").value.trim();
+  await readUri(`doc://kb/${t}`);
+}
+
+function render(d, uri) {
+  $("raw").textContent = JSON.stringify(d, null, 2);
+  if (!d.ok) {
+    $("mime").className = "tag bad";
+    $("mime").textContent = d.error_type || "失败";
+    $("metaline").textContent = uri;
+    $("doc").innerHTML = `<div class="note bad">${esc(d.error)}</div>`;
+    $("hint").innerHTML = `<div class="note">注意这里没有 <code>is_error</code> ——
+      <code>read_resource</code> 失败时客户端<b>抛异常</b>，服务端写的「未知主题：nope」被脱敏掉了，
+      客户端只看到 <code>Error creating resource from template</code>。
+      如果这个失败需要模型自己纠正，它就该是 tool，不是 resource。</div>`;
+    return;
+  }
+  $("mime").className = "tag ok";
+  $("mime").textContent = d.mime_type || "—";
+  $("metaline").textContent = `${d.uris ? d.uris.join(", ") : uri} · ${(d.text || "").length} 字符`;
+  $("doc").innerHTML = md(d.text || "");
+  $("hint").innerHTML = `<div class="note ok">只读、无副作用、同样的 URI 永远同样内容 ——
+    所以这类东西适合 preload 进上下文，而不是让模型「调一次」。</div>`;
+}
+
+(async () => {
+  await loadList();
+  await loadHealth();
+  await readUri("doc://handbook/leave");
+})();
+</script>
+</body>
+</html>

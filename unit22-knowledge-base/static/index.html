@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Unit 22 · 知识库实验台</title>
+<style>
+  :root{--bg:#f7f7f5;--card:#fff;--line:#e3e2de;--text:#23231f;--dim:#7a7972;--accent:#185FA5;--ok:#0F6E56;--bad:#A32D2D;--warn:#854F0B}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font:14px/1.65 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;padding:20px}
+  .wrap{max-width:1040px;margin:0 auto}
+  h1{font-size:19px;font-weight:600}h2{font-size:13px;font-weight:600;color:var(--dim);margin-bottom:11px;letter-spacing:.02em}
+  .sub{color:var(--dim);font-size:13px;margin:4px 0 16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:15px;margin-bottom:14px}
+  button{padding:7px 13px;border:1px solid var(--line);border-radius:7px;background:#fff;font:inherit;font-size:13px;cursor:pointer;color:var(--text)}
+  button:hover{background:#f0efec}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{background:#0C447C}
+  button.tiny{padding:3px 8px;font-size:12px}
+  button.danger{color:var(--bad);border-color:#E9BDBD}
+  button.danger:hover{background:#FBEDED}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .ctrls{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px}
+  .ctrls label{font-size:12px;color:var(--dim);display:block;margin-bottom:4px}
+  .ctrls input,.ctrls select{width:100%;padding:6px 9px;border:1px solid var(--line);border-radius:7px;font:inherit;font-size:13px;background:#fff}
+  .banner{padding:9px 13px;border-radius:8px;font-size:13px;margin-bottom:14px;border:1px solid var(--line);background:var(--card)}
+  .banner.ok{border-color:#9FE1CB;background:#E1F5EE;color:var(--ok)}
+  .banner.warn{border-color:#FAC775;background:#FAEEDA;color:var(--warn)}
+  .tag{display:inline-block;font-size:11.5px;padding:1px 7px;border-radius:20px;border:1px solid var(--line);color:var(--dim)}
+  .tag.on{border-color:var(--accent);color:var(--accent)}
+  .kb{border:1px solid var(--line);border-radius:9px;padding:9px 12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:10px;cursor:pointer}
+  .kb:hover{background:#faf9f7}
+  .kb.sel{border-color:var(--accent);background:#F2F7FC}
+  .kb .nm{font-size:13px}
+  .kb .meta{font-size:11.5px;color:var(--dim);margin-top:2px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font-size:12px;color:var(--dim);font-weight:600}
+  td.num{text-align:right;font-variant-numeric:tabular-nums}
+  .mono{font-family:ui-monospace,Consolas,monospace;font-size:12px}
+  .chunk{border:1px solid var(--line);border-radius:9px;padding:9px 11px;margin-bottom:7px;background:#fff}
+  .chunk .hd{font-size:11.5px;color:var(--dim);margin-bottom:4px}
+  .chunk .tx{font-size:13px;white-space:pre-wrap;word-break:break-word}
+  .err{color:var(--bad);font-size:12.5px}
+  .ok{color:var(--ok)}
+  .note{font-size:12.5px;color:var(--warn);background:#FAEEDA;border:1px solid #FAC775;border-radius:8px;padding:8px 12px;margin-top:10px}
+  .hint{font-size:12px;color:var(--dim);margin-top:6px}
+  .empty{font-size:13px;color:var(--dim);padding:6px 2px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Unit 22 · 知识库实验台</h1>
+  <div class="sub">上传、去重、租户隔离、级联删除 —— 每一步都能在下面的表格里看到对应的行</div>
+
+  <div class="banner" id="health">探测后端…</div>
+
+  <div class="card">
+    <h2>① 租户与知识库</h2>
+    <div class="ctrls">
+      <div><label>X-Tenant（换一个就是另一个租户）</label><input id="tenant" value="acme"></div>
+      <div><label>新建知识库名称</label><input id="kbname" value="制度库"></div>
+      <div><label>&nbsp;</label><button class="primary" onclick="createKb()">建库</button></div>
+    </div>
+    <div id="kbs"><div class="empty">还没有库，先建一个</div></div>
+  </div>
+
+  <div class="card">
+    <h2>② 上传一个文件</h2>
+    <div class="row">
+      <input type="file" id="file">
+      <button class="primary" onclick="uploadFile()">上传到选中的库</button>
+      <button onclick="uploadSample()">用内置样例 md</button>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <span class="tag">攻击演示</span>
+      <button class="tiny" onclick="attackMagic()">PNG 改名 .pdf</button>
+      <button class="tiny" onclick="attackBig()">2 MB + 1 字节</button>
+      <button class="tiny" onclick="attackCross()">跨租户读别人的库</button>
+      <button class="tiny" onclick="attackTenant()">非法 X-Tenant</button>
+    </div>
+    <div id="result"></div>
+    <div class="note">白名单只拦文件名，真伪靠魔数：PNG 改名成 .pdf 会被 <span class="mono">magic_mismatch</span> 打回。
+      同一个文件重传不会多一行，但换个租户传就是另一条独立记录。</div>
+  </div>
+
+  <div id="docs"></div>
+  <div id="chunks"></div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const state = { tenant: "acme", kb: null };
+
+function esc(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+async function api(path, opt = {}) {
+  const r = await fetch(path, {
+    ...opt,
+    headers: { "X-Tenant": state.tenant, ...(opt.body ? { "Content-Type": "application/json" } : {}), ...(opt.headers || {}) }
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error((d.detail && JSON.stringify(d.detail)) || ("HTTP " + r.status));
+  return d;
+}
+
+async function loadHealth(customTenant) {
+  try {
+    const t = customTenant || state.tenant;
+    const r = await fetch("health", { headers: { "X-Tenant": t } });
+    const h = await r.json();
+    if (!r.ok) throw new Error(h.detail || ("HTTP " + r.status));
+    $("health").className = "banner ok";
+    $("health").textContent = `租户 ${h.tenant} · 库 ${h.kbs} / 文档 ${h.docs} / 块 ${h.chunks} · `
+      + `上限 ${(h.max_bytes / 1048576).toFixed(0)} MB · 块长 ${h.chunk_chars} 字 · 外键 ${h.foreign_keys ? "ON" : "OFF"} · ${h.db}`;
+  } catch (e) {
+    $("health").className = "banner warn";
+    $("health").textContent = "后端没响应：" + e.message;
+  }
+}
+
+function syncTenant() {
+  state.tenant = ($("tenant").value || "demo").trim();
+  state.kb = null;
+  $("result").innerHTML = "";
+  $("chunks").innerHTML = "";
+  loadKbs();
+  loadHealth();
+}
+
+async function loadKbs() {
+  try {
+    const d = await api("kb");
+    if (!d.count) {
+      $("kbs").innerHTML = `<div class="empty">租户 ${esc(d.tenant)} 下还没有知识库</div>`;
+      $("docs").innerHTML = "";
+      return;
+    }
+    if (!state.kb || !d.items.some(k => k.id === state.kb)) state.kb = d.items[0].id;
+    $("kbs").innerHTML = d.items.map(k => `
+      <div class="kb ${k.id === state.kb ? "sel" : ""}" onclick="selectKb('${esc(k.id)}')">
+        <div>
+          <div class="nm">${esc(k.name)} <span class="tag">${esc(k.id)}</span></div>
+          <div class="meta">文档 ${k.doc_count} · 块 ${k.chunk_count} · ${esc(k.created_at)}</div>
+        </div>
+        <button class="tiny danger" onclick="event.stopPropagation();delKb('${esc(k.id)}')">删库</button>
+      </div>`).join("");
+    loadDocs();
+  } catch (e) {
+    $("kbs").innerHTML = `<div class="err">${esc(e.message)}</div>`;
+  }
+}
+
+function selectKb(id) { state.kb = id; $("chunks").innerHTML = ""; loadKbs(); }
+
+async function createKb() {
+  try {
+    const d = await api("kb", { method: "POST", body: JSON.stringify({ name: $("kbname").value }) });
+    state.kb = d.kb_id;
+    await loadKbs(); loadHealth();
+  } catch (e) { $("result").innerHTML = `<div class="err">建库失败：${esc(e.message)}</div>`; }
+}
+
+async function loadDocs() {
+  if (!state.kb) { $("docs").innerHTML = ""; return; }
+  try {
+    const d = await api(`kb/${state.kb}/docs`);
+    $("docs").innerHTML = `<div class="card">
+      <h2>③ 文档（${esc(state.kb)} · ${d.count} 份）</h2>
+      ${d.count ? `<table><thead><tr><th>文件名</th><th>类型</th><th class="num">字节</th><th class="num">字数</th>
+        <th class="num">块</th><th>sha256</th><th>操作</th></tr></thead><tbody>
+        ${d.items.map(x => `<tr>
+          <td>${esc(x.name)}</td><td class="mono">${esc(x.ext)}</td>
+          <td class="num">${x.size}</td><td class="num">${x.chars}</td><td class="num">${x.chunk_count}</td>
+          <td class="mono">${esc(x.sha256)}</td>
+          <td><button class="tiny" onclick="showChunks('${esc(x.id)}')">看块</button>
+              <button class="tiny danger" onclick="delDoc('${esc(x.id)}')">删文档</button></td>
+        </tr>`).join("")}</tbody></table>`
+      : `<div class="empty">这个库还是空的</div>`}
+    </div>`;
+  } catch (e) {
+    $("docs").innerHTML = `<div class="card"><div class="err">${esc(e.message)}</div></div>`;
+  }
+}
+
+async function uploadBytes(name, b64) {
+  if (!state.kb) throw new Error("先建一个库");
+  return api(`kb/${state.kb}/docs`, { method: "POST", body: JSON.stringify({ filename: name, content_b64: b64 }) });
+}
+
+function showUpload(d, extra) {
+  $("result").innerHTML = `<div class="ok" style="margin-top:10px">
+    ${d.dedup ? "命中已有内容（没有新增行）" : "新增一文档"} ·
+    <span class="mono">${esc(d.doc_id)}</span> · 块 ${d.chunks} · 字数 ${d.chars} · sha256 <span class="mono">${esc(d.sha256)}</span>
+    ${extra ? " · " + esc(extra) : ""}</div>`;
+}
+
+async function uploadFile() {
+  const f = $("file").files[0];
+  if (!f) { $("result").innerHTML = `<div class="err">先选一个文件</div>`; return; }
+  const buf = new Uint8Array(await f.arrayBuffer());
+  let bin = "";
+  for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
+  try {
+    const d = await uploadBytes(f.name, btoa(bin));
+    showUpload(d);
+    await loadKbs(); loadHealth();
+  } catch (e) {
+    $("result").innerHTML = `<div class="err">被拒：${esc(e.message)}</div>`;
+  }
+}
+
+const SAMPLE_MD = "# 员工手册\n\n年假需提前 3 个工作日在系统提交申请，由直属主管审批。入职满一年享 5 天。\n\n"
+  + "退款金额原路退回，到账时间以支付渠道为准，通常 3–5 个工作日。\n\n"
+  + "连续 5 次登录失败锁定账号 30 分钟。密码 12 位以上，每 90 天更换一次。\n\n";
+
+async function uploadSample() {
+  try {
+    const d = await uploadBytes("handbook.md", btoa(unescape(encodeURIComponent(SAMPLE_MD))));
+    showUpload(d, d.dedup ? "再点一次还是这个 doc_id" : "");
+    await loadKbs(); loadHealth();
+  } catch (e) { $("result").innerHTML = `<div class="err">被拒：${esc(e.message)}</div>`; }
+}
+
+// 1×1 透明 PNG：内容是真 PNG，名字却叫 .pdf
+const PNG_B64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+
+async function attackMagic() {
+  try {
+    const d = await uploadBytes("invoice.pdf", PNG_B64);
+    $("result").innerHTML = `<div class="err">竟然过了？doc_id ${esc(d.doc_id)}</div>`;
+  } catch (e) { $("result").innerHTML = `<div class="err">按预期被拒：${esc(e.message)}</div>`; }
+}
+
+async function attackBig() {
+  const big = "a".repeat(2 * 1024 * 1024 + 1);
+  try {
+    await uploadBytes("huge.txt", btoa(big));
+    $("result").innerHTML = `<div class="err">竟然过了？</div>`;
+  } catch (e) { $("result").innerHTML = `<div class="err">按预期被拒：${esc(e.message)}</div>`; }
+}
+
+async function attackCross() {
+  if (!state.kb) { $("result").innerHTML = `<div class="err">先建一个库</div>`; return; }
+  const victim = state.kb;
+  const r = await fetch(`kb/${victim}/docs`, { headers: { "X-Tenant": "globex" } });
+  const d = await r.json().catch(() => ({}));
+  $("result").innerHTML = r.status === 404
+    ? `<div class="ok">globex 用 acme 的 kb_id 去读 → 404「${esc(d.detail || "")}」（不是 403，连存在性都不给）</div>`
+    : `<div class="err">状态码 ${r.status}：${esc(JSON.stringify(d))}</div>`;
+}
+
+async function attackTenant() {
+  const r = await fetch("kb", { headers: { "X-Tenant": "bad tenant!" } });
+  const d = await r.json().catch(() => ({}));
+  $("result").innerHTML = r.status === 400
+    ? `<div class="ok">非法租户名 → 400「${esc(d.detail || "")}」</div>`
+    : `<div class="err">状态码 ${r.status}：${esc(JSON.stringify(d))}</div>`;
+}
+
+async function showChunks(docId) {
+  try {
+    const d = await api(`kb/${state.kb}/chunks?doc_id=${encodeURIComponent(docId)}`);
+    $("chunks").innerHTML = `<div class="card">
+      <h2>④ 块（${esc(docId)} · ${d.count} 块）</h2>
+      ${d.count ? d.items.map(c => `<div class="chunk">
+        <div class="hd">#${c.id} · idx ${c.idx} · ${esc(c.text.length)} 字</div>
+        <div class="tx">${esc(c.text)}</div></div>`).join("")
+      : `<div class="empty">这份文档没有块（二进制文件不产块，解析器是 Unit 17）</div>`}
+      <div class="hint">删掉这份文档再回来看：这里的块会一起消失，因为 chunks.doc_id 上有 ON DELETE CASCADE。</div>
+    </div>`;
+  } catch (e) { $("chunks").innerHTML = `<div class="card"><div class="err">${esc(e.message)}</div></div>`; }
+}
+
+async function delDoc(id) {
+  try {
+    const d = await api(`kb/${state.kb}/docs/${id}`, { method: "DELETE" });
+    $("chunks").innerHTML = "";
+    $("result").innerHTML = `<div class="ok">删掉文档 · 连带 ${d.chunks_removed} 块 / ${d.jobs_removed} 条任务记录</div>`;
+    await loadKbs(); loadHealth();
+  } catch (e) { $("result").innerHTML = `<div class="err">${esc(e.message)}</div>`; }
+}
+
+async function delKb(id) {
+  try {
+    const d = await api(`kb/${id}`, { method: "DELETE" });
+    state.kb = null;
+    $("chunks").innerHTML = "";
+    $("result").innerHTML = `<div class="ok">删掉知识库 · 连带 ${d.docs_removed} 文档 / ${d.chunks_removed} 块 / ${d.jobs_removed} 条任务记录</div>`;
+    await loadKbs(); loadHealth();
+  } catch (e) { $("result").innerHTML = `<div class="err">${esc(e.message)}</div>`; }
+}
+
+$("tenant").addEventListener("change", syncTenant);
+loadHealth().then(loadKbs);
+</script>
+</body>
+</html>

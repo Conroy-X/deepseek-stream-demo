@@ -1,0 +1,13 @@
+[project]
+name = "unit41-search-tool"
+version = "0.1.0"
+description = "Unit 41：搜索工具（离线 fixture），重点讲工具 schema 该怎么写"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi[standard]>=0.115",
+    "httpx>=0.27",
+    "python-dotenv>=1.0",
+]
+
+[tool.uv]
+package = false

@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Unit 24 · Embedding 流水线</title>
+<style>
+  :root{--bg:#f7f7f5;--card:#fff;--line:#e3e2de;--text:#23231f;--dim:#7a7972;--accent:#185FA5;--ok:#0F6E56;--bad:#A32D2D;--warn:#854F0B}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font:14px/1.65 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;padding:20px}
+  .wrap{max-width:1040px;margin:0 auto}
+  h1{font-size:19px;font-weight:600}h2{font-size:13px;font-weight:600;color:var(--dim);margin-bottom:11px;letter-spacing:.02em}
+  .sub{color:var(--dim);font-size:13px;margin:4px 0 16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:15px;margin-bottom:14px}
+  button{padding:7px 13px;border:1px solid var(--line);border-radius:7px;background:#fff;font:inherit;font-size:13px;cursor:pointer;color:var(--text)}
+  button:hover{background:#f0efec}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{background:#0C447C}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .ctrls{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:12px}
+  .ctrls label{font-size:12px;color:var(--dim);display:block;margin-bottom:4px}
+  .ctrls input{width:100%;padding:6px 9px;border:1px solid var(--line);border-radius:7px;font:inherit;font-size:13px;background:#fff}
+  .banner{padding:9px 13px;border-radius:8px;font-size:13px;margin-bottom:14px;border:1px solid var(--line);background:var(--card)}
+  .banner.ok{border-color:#9FE1CB;background:#E1F5EE;color:var(--ok)}
+  .banner.warn{border-color:#FAC775;background:#FAEEDA;color:var(--warn)}
+  .banner.bad{border-color:#F0C2C2;background:#FCEDED;color:var(--bad)}
+  .tag{display:inline-block;font-size:11.5px;padding:1px 7px;border-radius:20px;border:1px solid var(--line);color:var(--dim)}
+  .tag.ok{color:var(--ok);border-color:#9FE1CB}.tag.bad{color:var(--bad);border-color:#F0C2C2}
+  .tag.warn{color:var(--warn);border-color:#FAC775}
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+  .kpi{border:1px solid var(--line);border-radius:9px;padding:10px 12px}
+  .kpi .v{font-size:19px;font-weight:600;font-variant-numeric:tabular-nums}
+  .kpi .k{font-size:11.5px;color:var(--dim)}
+  .bar{height:7px;background:#eeede9;border-radius:4px;overflow:hidden;margin-top:11px}
+  .bar i{display:block;height:100%;background:var(--ok)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line)}
+  th{font-size:12px;color:var(--dim);font-weight:600}
+  td.num{text-align:right;font-variant-numeric:tabular-nums}
+  .ok{color:var(--ok)}.bad{color:var(--bad)}.warnc{color:var(--warn)}
+  .err{color:var(--bad);font-size:12.5px;word-break:break-all}
+  .note{font-size:12.5px;color:var(--warn);background:#FAEEDA;border:1px solid #FAC775;border-radius:8px;padding:8px 12px;margin-top:10px}
+  .mono{font-family:ui-monospace,Consolas,monospace;font-size:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Unit 24 · Embedding 流水线</h1>
+  <div class="sub">批量 · 限流重试 · 断点续跑 · token 与成本台账</div>
+
+  <div class="banner" id="health">探测后端…</div>
+
+  <div class="card">
+    <h2>① 控制台</h2>
+    <div class="ctrls">
+      <div><label>灌多少条</label><input id="n" type="number" value="100" min="1" max="1000"></div>
+      <div><label>batch_size</label><input id="bs" type="number" value="16" min="1" max="512"></div>
+      <div><label>max_retries</label><input id="retry" type="number" value="2" min="0" max="5"></div>
+      <div><label>注入 429 次数</label><input id="inject" type="number" value="0" min="0" max="10"></div>
+      <div><label>只跑前 N 条（模拟崩溃）</label><input id="limit" type="number" value="0" min="0" max="1000"></div>
+    </div>
+    <div class="row">
+      <button onclick="seedOnly()">灌数据</button>
+      <button class="primary" onclick="run()">跑一批</button>
+      <button onclick="resume()">断点续跑</button>
+      <button onclick="bench()">batch=1 vs 16 对比</button>
+    </div>
+    <div class="note">「对比」会跑两遍（每遍都要重置库），100 条约 10 秒，时间大头在重置库而不是算向量。
+      表里的「耗时」用 WAL + synchronous=NORMAL；换回默认 FULL，batch=1 那一行会变成十几秒 ——
+      慢的那一遍本身就是结论。</div>
+  </div>
+
+  <div id="status"></div>
+  <div id="benchOut"></div>
+  <div id="runOut"></div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+async function post(path, body) {
+  const r = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body || {})
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.detail ? JSON.stringify(d.detail) : ("HTTP " + r.status));
+  return d;
+}
+
+function esc(s) {
+  return String(s === null || s === undefined ? "" : s)
+    .replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+const money = v => "$" + Number(v).toFixed(6);
+const num = v => Number(v).toLocaleString("en-US");
+
+async function loadHealth() {
+  try {
+    const h = await (await fetch("health")).json();
+    $("health").className = "banner ok";
+    $("health").textContent =
+      `模型 ${h.model} · ${h.dim} 维 · 单价 $${h.price_per_mtok}/1M token · ` +
+      `库里 ${h.chunks} 条 · 内置 ${h.demo_clauses} 条条款 · ${h.db}`;
+  } catch (e) {
+    $("health").className = "banner warn";
+    $("health").textContent = "后端没响应：" + e.message;
+  }
+}
+
+function params() {
+  return {
+    n: +$("n").value,
+    batch_size: +$("bs").value,
+    max_retries: +$("retry").value,
+    inject_failures: +$("inject").value,
+    max_chunks: +$("limit").value
+  };
+}
+
+function renderStatus(s) {
+  const pct = (s.progress * 100).toFixed(1);
+  $("status").innerHTML = `<div class="card">
+    <h2>② 状态（落库的，不是内存里的）</h2>
+    <div class="grid">
+      <div class="kpi"><div class="v">${s.done} / ${s.total}</div><div class="k">已完成</div></div>
+      <div class="kpi"><div class="v ${s.pending ? "warnc" : ""}">${s.pending}</div><div class="k">待处理</div></div>
+      <div class="kpi"><div class="v ${s.failed ? "bad" : ""}">${s.failed}</div><div class="k">失败</div></div>
+      <div class="kpi"><div class="v">${money(s.cost_usd)}</div><div class="k">累计成本</div></div>
+    </div>
+    <div class="bar"><i style="width:${pct}%"></i></div>
+    <div class="row" style="margin-top:11px">
+      <span class="tag">进度 ${pct}%</span>
+      <span class="tag">${s.runs} 次运行</span>
+      <span class="tag">${num(s.calls)} 次调用</span>
+      <span class="tag">${num(s.act_tokens)} token（实际）</span>
+      <span class="tag">${num(s.est_tokens)} token（估算）</span>
+      <span class="tag">${s.model} · ${s.dim} 维</span>
+    </div>
+    <div class="note">调用次数是限流和计费的<b>单位</b>：100 条一条一发是 100 次，batch=16 只要 7 次。
+      成本 = 实际 token / 1M × 单价，续跑不会把已 done 的再算一遍。</div>
+  </div>`;
+}
+
+function renderRun(rep, st) {
+  renderStatus(st);
+  const rows = rep.batches.map(b => `<tr>
+      <td>#${b.index}</td>
+      <td class="num">${b.size}</td>
+      <td class="num">${b.attempts}</td>
+      <td class="mono">${b.delays.length ? esc(b.delays.join(" → ")) + "s" : "—"}</td>
+      <td class="${b.ok ? "ok" : "bad"}">${b.ok ? "成功" : "失败"}</td>
+      <td class="err">${esc(b.error)}</td>
+    </tr>`).join("");
+  $("runOut").innerHTML = `<div class="card">
+    <h2>③ 本次运行 ${esc(rep.run_id)}</h2>
+    <div class="row" style="margin-bottom:10px">
+      <span class="tag">${rep.calls} 次调用</span>
+      <span class="tag">投喂 ${rep.texts} 条</span>
+      <span class="tag ok">完成 ${rep.done}</span>
+      <span class="tag ${rep.failed ? "bad" : ""}">失败 ${rep.failed}</span>
+      <span class="tag">${num(rep.act_tokens)} token</span>
+      <span class="tag">${money(rep.cost_usd)}</span>
+      <span class="tag">剩余 ${rep.pending_after}</span>
+    </div>
+    ${rep.note ? `<div class="note">${esc(rep.note)}</div>` : ""}
+    <table><thead><tr><th>批次</th><th class="num">条数</th><th class="num">尝试</th><th>退避</th><th>结果</th><th>错误</th></tr></thead>
+    <tbody>${rows || `<tr><td colspan="6" class="warnc">没有批次（全部 done）</td></tr>`}</tbody></table>
+    <div class="note">「尝试」= 1 + 重试次数。注入 2 次 429、max_retries=2 时，第一批会显示 3 次尝试、退避 0.2 → 0.4 秒。</div>
+  </div>`;
+  loadHealth();
+}
+
+async function seedOnly() {
+  const p = params();
+  try {
+    const d = await post("seed", { n: p.n });
+    renderStatus(d.status);
+    $("runOut").innerHTML = "";
+    loadHealth();
+  } catch (e) {
+    $("runOut").innerHTML = `<div class="card"><div class="err">${esc(e.message)}</div></div>`;
+  }
+}
+
+async function run() {
+  const p = params();
+  try {
+    const d = await post("run", {
+      batch_size: p.batch_size, max_retries: p.max_retries,
+      inject_failures: p.inject_failures, max_chunks: p.max_chunks
+    });
+    renderRun(d.report, d.status);
+  } catch (e) {
+    $("runOut").innerHTML = `<div class="card"><div class="err">${esc(e.message)}</div></div>`;
+  }
+}
+
+async function resume() {
+  const p = params();
+  try {
+    const d = await post("resume", { batch_size: p.batch_size, max_retries: p.max_retries });
+    renderRun(d.report, d.status);
+  } catch (e) {
+    $("runOut").innerHTML = `<div class="card"><div class="err">${esc(e.message)}</div></div>`;
+  }
+}
+
+async function bench() {
+  const n = +$("n").value, bs = +$("bs").value;
+  $("benchOut").innerHTML = `<div class="card"><div class="tag">跑两遍，每遍都重置库…</div></div>`;
+  try {
+    const d = await (await fetch(`bench?n=${n}&batch_size=${bs}`, { method: "POST" })).json();
+    const a = d.arms[0], b = d.arms[1];
+    const ratio = b.calls ? (a.calls / b.calls).toFixed(1) : "—";
+    $("benchOut").innerHTML = `<div class="card">
+      <h2>④ ${d.chunks} 条 · batch=1 与 batch=${esc(b.batch_size)}</h2>
+      <table><thead><tr><th>batch_size</th><th class="num">调用次数</th><th class="num">完成</th><th class="num">token</th><th class="num">成本</th><th class="num">本地耗时</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td class="num bad">${a.calls}</td><td class="num">${a.done}</td><td class="num">${num(a.act_tokens)}</td><td class="num">${money(a.cost_usd)}</td><td class="num">${a.elapsed_ms} ms</td></tr>
+        <tr><td>${esc(b.batch_size)}</td><td class="num ok">${b.calls}</td><td class="num">${b.done}</td><td class="num">${num(b.act_tokens)}</td><td class="num">${money(b.cost_usd)}</td><td class="num">${b.elapsed_ms} ms</td></tr>
+      </tbody></table>
+      <div class="note">调用次数差 <b>${ratio} 倍</b>，而 token 和成本完全一样 —— 批量省的是<b>请求次数</b>，不是 token。
+        ${esc(d.note)}</div>
+    </div>`;
+    const r = await (await fetch("status")).json();
+    renderStatus(r.status);
+    loadHealth();
+  } catch (e) {
+    $("benchOut").innerHTML = `<div class="card"><div class="err">${esc(e.message)}</div></div>`;
+  }
+}
+
+loadHealth();
+(async () => {
+  try {
+    const r = await (await fetch("status")).json();
+    renderStatus(r.status);
+  } catch (e) { /* 后端没起来时留给 banner 报 */ }
+})();
+</script>
+</body>
+</html>

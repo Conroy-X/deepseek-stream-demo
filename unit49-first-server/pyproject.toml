@@ -1,0 +1,14 @@
+[project]
+name = "unit49-first-server"
+version = "0.1.0"
+description = "Unit 49：第一个 MCP Server（Python SDK 2.x 的 MCPServer）"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi[standard]>=0.115",
+    "httpx>=0.27",
+    "python-dotenv>=1.0",
+    "mcp>=2.0,<3",
+]
+
+[tool.uv]
+package = false

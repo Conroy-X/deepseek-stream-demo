@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Unit 32 · 参数 Schema 实验台</title>
+<style>
+  :root{--bg:#f7f7f5;--card:#fff;--line:#e3e2de;--text:#23231f;--dim:#7a7972;--accent:#185FA5;--ok:#0F6E56;--bad:#A32D2D;--warn:#854F0B}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font:14px/1.65 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;padding:20px}
+  .wrap{max-width:1000px;margin:0 auto}
+  h1{font-size:19px;font-weight:600}h2{font-size:13px;font-weight:600;color:var(--dim);margin-bottom:11px}
+  .sub{color:var(--dim);font-size:13px;margin:4px 0 16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:15px;margin-bottom:14px}
+  button{padding:7px 13px;border:1px solid var(--line);border-radius:7px;background:#fff;font:inherit;font-size:13px;cursor:pointer;color:var(--text)}
+  button:hover{background:#f0efec}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.on{background:#E6F1FB;border-color:var(--accent);color:var(--accent)}
+  textarea,input{padding:8px 11px;border:1px solid var(--line);border-radius:8px;font:12.5px/1.7 ui-monospace,"Cascadia Code",monospace;background:#fff;color:var(--text);width:100%}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .banner{padding:9px 13px;border-radius:8px;font-size:13px;margin-bottom:14px;border:1px solid var(--line);background:var(--card)}
+  .banner.ok{border-color:#9FE1CB;background:#E1F5EE;color:var(--ok)}
+  .banner.bad{border-color:#F5C4C4;background:#FCEBEB;color:var(--bad)}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media(max-width:820px){.grid{grid-template-columns:1fr}}
+  pre{font:12px/1.7 ui-monospace,"Cascadia Code",monospace;white-space:pre-wrap;word-break:break-word;background:#fbfbf9;border:1px solid var(--line);border-radius:8px;padding:10px;max-height:340px;overflow:auto}
+  .tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:20px;border:1px solid var(--line);color:var(--dim)}
+  .tag.ok{background:#E1F5EE;border-color:#9FE1CB;color:var(--ok)}
+  .tag.bad{background:#FCEBEB;border-color:#F5C4C4;color:var(--bad)}
+  .err{color:var(--bad);font-size:12.5px}
+  .note{font-size:12.5px;color:var(--warn);background:#FAEEDA;border:1px solid #FAC775;border-radius:8px;padding:8px 12px;margin-top:10px}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th,td{text-align:left;padding:5px 8px;border-bottom:1px solid var(--line)}
+  th{color:var(--dim);font-weight:600}
+  td.mono{font-family:ui-monospace,monospace}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Unit 32 · 参数 Schema 实验台</h1>
+  <div class="sub">同一份 Pydantic 模型 → 生成给模型看的 schema，也生成给代码用的校验器</div>
+
+  <div class="banner" id="health">探测后端…</div>
+
+  <div class="card">
+    <h2>1. 选一个工具（下面是它生成的 schema，不是手写的）</h2>
+    <div class="row" id="toolBtns"></div>
+    <div class="row" id="stats" style="margin-top:10px;font-size:12px;color:var(--dim)"></div>
+    <div class="grid" style="margin-top:12px">
+      <div><h2>parameters（已摊平 $ref / 去掉 title）</h2><pre id="schema"></pre></div>
+      <div><h2>OpenAI tools 数组里的这一条</h2><pre id="opentool"></pre></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>2. 假装这是模型返回的 arguments（字符串，不是对象）</h2>
+    <textarea id="args" rows="4">{"keyword":"耳机","status":"已发货"}</textarea>
+    <div class="row" style="margin-top:9px">
+      <button class="primary" onclick="doValidate()">校验</button>
+      <button onclick="fillOk()">填一个合法的</button>
+      <button onclick="fillEnum()">枚举值翻成中文</button>
+      <button onclick="fillExtra()">多塞一个字段</button>
+      <button onclick="fillNested()">看嵌套字段的路径</button>
+    </div>
+    <div id="vout" style="margin-top:12px"></div>
+  </div>
+
+  <div class="card">
+    <h2>3. 反例：手写 schema + 手写 if/else 校验器 → 两边漂移</h2>
+    <div class="row"><button onclick="loadDrift()">跑漂移检测</button></div>
+    <div id="drift" style="margin-top:12px"></div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let tools = [], current = null;
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+async function j(path, opt) {
+  const r = await fetch(path, opt);
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.detail || ("HTTP " + r.status));
+  return d;
+}
+
+async function boot() {
+  try {
+    const h = await j("health");
+    $("health").className = "banner ok";
+    $("health").textContent = `后端就绪 · 工具：${h.tools.join(" / ")} · 模型：${h.model}`;
+    tools = (await j("tools")).tools;
+    $("toolBtns").innerHTML = h.tools.map(n =>
+      `<button data-n="${esc(n)}" onclick="pick('${esc(n)}')">${esc(n)}</button>`).join("");
+    pick(h.tools[0]);
+  } catch (e) {
+    $("health").className = "banner bad";
+    $("health").textContent = "后端没响应：" + e.message;
+  }
+}
+
+async function pick(name) {
+  current = name;
+  document.querySelectorAll("#toolBtns button").forEach(b => b.classList.toggle("on", b.dataset.n === name));
+  const d = await j("schema/" + name);
+  $("schema").textContent = JSON.stringify(d.openai, null, 2);
+  const t = tools.find(x => x.function.name === name);
+  $("opentool").textContent = JSON.stringify(t, null, 2);
+  $("stats").innerHTML = `$defs ${d.stats.defs} 个 · $ref 摊平前 ${d.stats.refs_before} 处 → 摊平后 ${d.stats.refs_after} 处 · parameters ${d.stats.params_bytes} 字节`;
+  const req = d.openai.required || [];
+  $("args").value = JSON.stringify(Object.fromEntries(req.slice(0, 2).map(k => [k, k === "limit" ? 5 : "示例"])), null, 0);
+  $("vout").innerHTML = "";
+}
+
+function fillOk() {
+  $("args").value = current === "search_orders" ? '{"keyword":"耳机","status":"refunded"}'
+    : current === "refund_order" ? '{"order_id":"SO-000123","amount":899,"reason":"质量问题"}'
+    : '{"title":"周会","start":"2026-11-03T14:30","attendees":["a@b.c"],"room":{"building":"A 座","floor":3}}';
+}
+function fillEnum() {
+  $("args").value = current === "search_orders" ? '{"keyword":"耳机","status":"已发货"}'
+    : current === "refund_order" ? '{"order_id":"SO-000123","amount":899,"reason":"不想要了"}'
+    : '{"title":"周会","start":"下周二下午两点","attendees":["a@b.c"],"room":{"building":"A 座","floor":3}}';
+}
+function fillExtra() {
+  $("args").value = '{"keyword":"耳机","admin":true,"limit":999}';
+}
+function fillNested() {
+  $("args").value = '{"title":"周会","start":"2026-11-03T14:30","attendees":[],"room":{"building":"D 座","floor":99}}';
+}
+
+async function doValidate() {
+  try {
+    const d = await j("validate", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: current, arguments: $("args").value })
+    });
+    if (d.ok) {
+      $("vout").innerHTML = `<div class="banner ok">校验通过 <span class="tag ok">ok</span></div>
+        <h2>归一化后的参数（只有模型真的传了的字段）</h2><pre>${esc(JSON.stringify(d.normalized, null, 2))}</pre>
+        <h2>执行结果</h2><pre>${esc(JSON.stringify(d.result, null, 2))}</pre>
+        <div class="note">${esc(d.note || "")}</div>`;
+    } else {
+      const rows = d.errors.map(e => `<tr><td class="mono">${esc(e.path || "(整体)")}</td><td class="mono">${esc(e.type)}</td><td>${esc(e.msg)}</td></tr>`).join("");
+      $("vout").innerHTML = `<div class="banner bad">校验失败 ${d.errors.length} 条 <span class="tag bad">rejected</span></div>
+        <table><thead><tr><th>字段路径</th><th>错误类型</th><th>说明</th></tr></thead><tbody>${rows}</tbody></table>
+        <div class="note">这就是要回给模型的东西：告诉它哪个字段错了、错在哪，它下一次能改对。</div>`;
+    }
+  } catch (e) {
+    $("vout").innerHTML = `<div class="err">失败：${esc(e.message)}</div>`;
+  }
+}
+
+async function loadDrift() {
+  const d = await j("drift");
+  $("drift").innerHTML = `<div class="grid">
+      <div><h2>生成（唯一真源）</h2><pre>${esc(JSON.stringify(d.generated, null, 2))}</pre></div>
+      <div><h2>手写（半年后没人敢改那份）</h2><pre>${esc(JSON.stringify(d.legacy, null, 2))}</pre></div>
+    </div>
+    <h2 style="margin-top:12px">差异 ${d.diffs.length} 处</h2>
+    <pre>${esc(d.diffs.join("\n"))}</pre>
+    <div class="banner bad" style="margin-top:12px">同一份输入 <span class="mono">${esc(JSON.stringify(d.case))}</span>：
+      生成 schema → <b>${esc(d.generated_verdict)}</b>，手写校验器 → <b>${esc(d.legacy_verdict)}</b>。
+      两个实现给出相反结论，这就是漂移的代价。</div>`;
+}
+
+boot();
+</script>
+</body>
+</html>

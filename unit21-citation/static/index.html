@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Unit 21 · 引用校验台</title>
+<style>
+  :root{--bg:#f7f7f5;--card:#fff;--line:#e3e2de;--text:#23231f;--dim:#7a7972;--accent:#185FA5;--ok:#0F6E56;--bad:#A32D2D;--warn:#854F0B}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font:14px/1.65 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;padding:20px}
+  .wrap{max-width:1100px;margin:0 auto}
+  h1{font-size:19px;font-weight:600}h2{font-size:13px;font-weight:600;color:var(--dim);margin-bottom:11px;letter-spacing:.02em}
+  .sub{color:var(--dim);font-size:13px;margin:4px 0 16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:15px;margin-bottom:14px}
+  button{padding:7px 13px;border:1px solid var(--line);border-radius:7px;background:#fff;font:inherit;font-size:13px;cursor:pointer;color:var(--text)}
+  button:hover{background:#f0efec}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{background:#0C447C}
+  button.mini{padding:3px 9px;font-size:12px}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  textarea{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:7px;font:inherit;font-size:13.5px;line-height:1.7;background:#fff;resize:vertical}
+  .banner{padding:9px 13px;border-radius:8px;font-size:13px;margin-bottom:14px;border:1px solid var(--line);background:var(--card)}
+  .banner.ok{border-color:#9FE1CB;background:#E1F5EE;color:var(--ok)}
+  .banner.warn{border-color:#FAC775;background:#FAEEDA;color:var(--warn)}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
+  @media (max-width:900px){.grid{grid-template-columns:1fr}}
+  .tag{display:inline-block;font-size:11.5px;padding:1px 7px;border-radius:20px;border:1px solid var(--line);color:var(--dim);font-variant-numeric:tabular-nums}
+  .tag.ok{border-color:#9FE1CB;background:#E1F5EE;color:var(--ok)}
+  .tag.bad{border-color:#F7C1C1;background:#FCEBEB;color:var(--bad)}
+  .tag.warn{border-color:#FAC775;background:#FAEEDA;color:var(--warn)}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font-size:11.5px;color:var(--dim);font-weight:600}
+  td.num{text-align:right;font-variant-numeric:tabular-nums}
+  .hit{color:var(--ok)}.miss{color:var(--bad)}
+  pre{background:#fbfbf9;border:1px solid var(--line);border-radius:8px;padding:10px;font:12px/1.6 ui-monospace,Consolas,monospace;overflow:auto;white-space:pre-wrap;word-break:break-word;max-height:220px}
+  .ph{color:var(--dim);font-size:13px}
+  .note{font-size:12.5px;color:var(--warn);background:#FAEEDA;border:1px solid #FAC775;border-radius:8px;padding:8px 12px;margin-top:10px}
+  /* 服务端 render() 返回的片段自带这几个类，页面必须给它们样式，否则只有裸标签 */
+  .citation-answer{font-size:14px;line-height:1.85}
+  .citation-answer sup.cite{font-size:11px;font-weight:600}
+  .citation-answer sup.cite a{color:var(--accent);text-decoration:none;padding:0 1px}
+  .citation-answer sup.cite a:hover{text-decoration:underline}
+  .citation-answer .cite-bad{color:var(--bad);font-weight:600;border-bottom:1px dashed var(--bad);cursor:help}
+  .citation-sources h4{font-size:12px;color:var(--dim);margin:12px 0 6px}
+  .citation-sources ol{list-style:none;padding:0}
+  .citation-sources li{border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-bottom:7px;font-size:12.5px}
+  .citation-sources li:target{border-color:var(--accent);box-shadow:0 0 0 2px rgba(24,95,165,.12)}
+  .citation-sources .src-name{color:var(--dim);font-size:11.5px}
+  .citation-sources .src-text{margin-top:3px}
+  mark{background:#FFF3C4;padding:0 1px;border-radius:2px}
+  .srcbox{border:1px solid var(--line);border-radius:8px;padding:9px 11px;font-size:12.5px;line-height:1.7;margin-top:9px}
+  .srcbox del{color:var(--bad);background:#FCEBEB;text-decoration:none;padding:0 2px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Unit 21 · 引用校验台</h1>
+  <div class="sub">同一段答案，四个体检项：引用编号、覆盖率、越界、伪造；再加一层渲染转义</div>
+
+  <div class="banner" id="health">探测后端…</div>
+
+  <div class="card">
+    <h2>① 答案</h2>
+    <textarea id="ans" rows="3">年假需提前 3 个工作日在系统提交申请，由直属主管审批。[1]跨年未休完的年假最多结转 5 天。[2]</textarea>
+    <div class="row" style="margin-top:10px">
+      <button class="primary" onclick="run()">校验并渲染</button>
+      <span class="ph">内置案例：</span>
+      <span id="cases" class="row"></span>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>② 体检报告</h2>
+      <div class="row" id="verdict"><span class="ph">还没校验。</span></div>
+      <div id="sent"></div>
+    </div>
+    <div class="card">
+      <h2>③ 渲染结果（服务端先转义再替换）</h2>
+      <div id="rendered"><span class="ph">还没渲染。</span></div>
+      <div class="row" style="margin-top:10px">
+        <button class="mini" onclick="toggleRaw()">看 HTML 源码</button>
+        <span class="ph" id="rawhint"></span>
+      </div>
+      <pre id="raw" style="display:none"></pre>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>④ 定位：这句话到底出自哪里</h2>
+    <div id="loc"><span class="ph">在②的逐句表里点「定位」，看它回到哪条来源的第几个字符。</span></div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+let lastReport = null, rawOpen = false, NGRAM = 6;
+
+async function post(path, body) {
+  const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(typeof d.detail === "string" ? d.detail : JSON.stringify(d.detail || ("HTTP " + r.status)));
+  return d;
+}
+
+async function loadHealth() {
+  try {
+    const h = await (await fetch("health")).json();
+    NGRAM = h.ngram;
+    $("health").className = "banner ok";
+    $("health").textContent = `来源 ${h.sources} 条 · 引用正则 ${h.cite_pattern} · 滑窗 ${h.ngram} 字 · 伪造阈值 ${h.fabricated_below} · ${h.note}`;
+    const list = ["good", "partial", "out_of_range", "fabricated", "year", "xss"];
+    $("cases").innerHTML = list.map(k => `<button class="mini" onclick="loadCase('${k}')">${k}</button>`).join("");
+  } catch (e) {
+    $("health").className = "banner warn";
+    $("health").textContent = "后端没响应：" + e.message;
+  }
+}
+
+async function loadCase(name) {
+  try {
+    const d = await (await fetch("demo?case=" + encodeURIComponent(name))).json();
+    $("ans").value = d.answer;
+    $("health").className = "banner ok";
+    $("health").textContent = `已载入案例 ${d.case}：${d.title}`;
+    run();
+  } catch (e) {
+    $("health").className = "banner warn";
+    $("health").textContent = "载入案例失败：" + e.message;
+  }
+}
+
+async function run() {
+  const answer = $("ans").value;
+  try {
+    const d = await post("render", { answer });
+    lastReport = d.report;
+    $("rendered").innerHTML = d.html;          // 服务端已转义过答案，这里的 HTML 是可信的
+    $("raw").textContent = d.html;             // 源码用 textContent 展示，不解析
+    drawReport(d.report);
+    $("loc").innerHTML = '<span class="ph">在②的逐句表里点「定位」，看它回到哪条来源的第几个字符。</span>';
+  } catch (e) {
+    $("verdict").innerHTML = `<span class="tag bad">${esc(e.message)}</span>`;
+    $("sent").innerHTML = "";
+  }
+}
+
+function drawReport(r) {
+  const cov = (r.coverage * 100).toFixed(1);
+  $("verdict").innerHTML = [
+    `<span class="tag ${r.ok ? "ok" : "bad"}">${r.ok ? "通过" : "有问题"}</span>`,
+    `<span class="tag">覆盖率 ${cov}%</span>`,
+    `<span class="tag ${r.refs.length ? "" : "warn"}">引用 ${r.refs.length ? "[" + r.refs.join("][") + "]" : "无"}</span>`,
+    `<span class="tag ${r.out_of_range.length ? "bad" : "ok"}">越界 ${r.out_of_range.length}</span>`,
+    `<span class="tag ${r.fabricated.length ? "bad" : "ok"}">伪造 ${r.fabricated.length}</span>`,
+    `<span class="tag">未用来源 ${r.unused_sources.length ? r.unused_sources.join(",") : "无"}</span>`,
+  ].join("");
+
+  const rows = r.sentences.map((s, i) => {
+    const cls = s.fabricated ? "bad" : (s.cited ? "ok" : "warn");
+    const label = s.fabricated ? "伪造" : (s.cited ? "有引用" : "没引用");
+    return `<tr>
+      <td style="width:52%">${esc(s.text)}</td>
+      <td>${s.refs.length ? "[" + s.refs.join("][") + "]" : "—"}</td>
+      <td class="num">${s.support.toFixed(3)}</td>
+      <td><span class="tag ${cls}">${label}</span></td>
+      <td>${s.refs.length ? `<button class="mini" onclick="locate(${i}, ${s.refs[0]})">定位</button>` : ""}</td>
+    </tr>`;
+  }).join("");
+
+  $("sent").innerHTML = `<table style="margin-top:11px">
+    <thead><tr><th>句子（已去掉编号）</th><th>引用</th><th class="num">支撑度</th><th>判定</th><th></th></tr></thead>
+    <tbody>${rows || '<tr><td colspan="5" class="ph">没有可判定的句子。</td></tr>'}</tbody></table>
+    <div class="note">支撑度 = 这句话的 ${NGRAM} 字滑窗有多大比例能在被引来源里找到。低于阈值就是「编号对、内容错」——
+      模型最常见的编造方式，只查越界的检查器完全抓不到。</div>`;
+}
+
+async function locate(i, idx) {
+  const s = lastReport.sentences[i];
+  try {
+    const d = await post("locate", { snippet: s.text, idx });
+    const head = `<div class="row">
+      <span class="tag ${d.found ? "ok" : "bad"}">${d.found ? "定位成功" : "在来源里找不到"}</span>
+      <span class="tag">来源 [${d.idx}]</span>
+      <span class="tag">支撑度 ${d.support}</span>
+      ${d.found ? `<span class="tag">字符区间 [${d.start}, ${d.end})</span><span class="tag">${esc(d.source)} 第 ${d.page} 页</span>` : ""}
+    </div>`;
+    $("loc").innerHTML = head + `<div class="srcbox">${d.html}</div>
+      <div class="note">定位用的是 difflib 最长公共块，不是 find()。答案在句尾多一个标点、或只引半句时，
+        find() 直接返回 -1，而最长公共块还能告诉你「它最接近哪一段」。找不到时整段标红（del）。</div>`;
+  } catch (e) {
+    $("loc").innerHTML = `<span class="tag bad">${esc(e.message)}</span>`;
+  }
+}
+
+function toggleRaw() {
+  rawOpen = !rawOpen;
+  $("raw").style.display = rawOpen ? "" : "none";
+  $("rawhint").textContent = rawOpen ? "注意：答案里的 <script> 已经变成 &lt;script&gt;" : "";
+}
+
+loadHealth();
+run();
+</script>
+</body>
+</html>

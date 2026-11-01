@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Unit 47 · 架构与传输</title>
+<style>
+  :root{--bg:#f7f7f5;--card:#fff;--line:#e3e2de;--text:#23231f;--dim:#7a7972;
+        --accent:#185FA5;--ok:#0F6E56;--bad:#A32D2D;--warn:#854F0B}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+       font:14px/1.65 -apple-system,"Segoe UI","Noto Sans CJK SC",sans-serif}
+  header{padding:26px 30px 18px;border-bottom:1px solid var(--line);background:var(--card)}
+  h1{margin:0 0 6px;font-size:19px;font-weight:650;letter-spacing:-.2px}
+  header p{margin:0;color:var(--dim);font-size:13px;max-width:760px}
+  main{max-width:1060px;margin:0 auto;padding:22px 30px 60px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px 20px;margin-bottom:16px}
+  .card h2{margin:0 0 4px;font-size:14px;font-weight:650}
+  .card .sub{color:var(--dim);font-size:12.5px;margin:0 0 14px}
+  .tag{display:inline-block;padding:1px 7px;border-radius:5px;font-size:11.5px;
+       background:#eef2f7;color:var(--accent);margin-right:6px}
+  .tag.ok{background:#e8f3ef;color:var(--ok)}
+  .tag.bad{background:#fbecec;color:var(--bad)}
+  .tag.warn{background:#fbf1e3;color:var(--warn)}
+  .note{background:#fbfaf7;border-left:2px solid var(--line);padding:9px 12px;
+        color:var(--dim);font-size:12.5px;border-radius:0 6px 6px 0;margin:12px 0 0}
+  .banner{background:#e8f3ef;border:1px solid #cfe4db;color:var(--ok);
+          padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:16px;display:none}
+  .banner.bad{background:#fbecec;border-color:#f0cfcf;color:var(--bad)}
+  .banner.warn{background:#fbf1e3;border-color:#eee0c8;color:var(--warn)}
+  .layers{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+  .layer{border:1px solid var(--line);border-radius:9px;padding:13px 14px;background:#fcfcfb}
+  .layer h3{margin:0 0 8px;font-size:13px;font-weight:650}
+  .layer .k{font-size:11.5px;color:var(--dim);text-transform:uppercase;
+            letter-spacing:.06em;margin:9px 0 3px}
+  .layer ul{margin:0;padding-left:16px;font-size:12.5px}
+  .layer li{margin:1px 0}
+  .layer .no li{color:var(--dim);text-decoration:line-through;text-decoration-color:#ccc}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
+  th{color:var(--dim);font-weight:500;font-size:11.5px;letter-spacing:.04em}
+  td.num{text-align:right;font-variant-numeric:tabular-nums}
+  pre{margin:0;background:#1e1e1c;color:#e6e4dd;padding:12px 14px;border-radius:8px;
+      font:12px/1.55 ui-monospace,"Cascadia Code",Menlo,monospace;overflow:auto;max-height:340px;
+      white-space:pre-wrap;word-break:break-word}
+  button{font:inherit;font-size:12.5px;padding:6px 13px;border-radius:7px;cursor:pointer;
+         border:1px solid var(--line);background:#fff;color:var(--text)}
+  button:hover{border-color:#c9c8c2}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{background:#14538f}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  input,textarea,select{font:inherit;font-size:12.5px;padding:6px 9px;border:1px solid var(--line);
+                        border-radius:7px;background:#fff;color:var(--text);width:100%}
+  textarea{font-family:ui-monospace,Menlo,monospace;line-height:1.5;resize:vertical}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+  .row label{font-size:12.5px;color:var(--dim);white-space:nowrap}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .steps{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+  .step{flex:1;min-width:120px;border:1px solid var(--line);border-radius:8px;padding:8px 10px;
+        font-size:12px;color:var(--dim);background:#fcfcfb;transition:.18s}
+  .step.on{border-color:#a9d3c4;background:#e8f3ef;color:var(--ok)}
+  .step b{display:block;font-size:12.5px;color:var(--text);margin-bottom:2px}
+  .step.on b{color:var(--ok)}
+  .foot{color:var(--dim);font-size:12px;text-align:center;padding-top:8px}
+  @media(max-width:820px){.layers,.grid2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Unit 47 · 架构与传输</h1>
+  <p>帧的形状在 Unit 46 已经定死了。这一章只问一个问题：这些帧怎么从 A 进程走到 B 进程。
+     stdio 上你要自己解决边界，HTTP 上边界白送但每帧要背一堆头，而且得自己把「连接身份」补回来。</p>
+</header>
+
+<main>
+  <div class="banner" id="banner"></div>
+
+  <section class="card">
+    <h2>Host / Client / Server</h2>
+    <p class="sub">一个 Server 一个 Client。Host 里有 3 个 Server，就是 3 次握手、3 份独立状态。</p>
+    <div class="layers" id="layers"><div class="note">加载中…</div></div>
+    <div class="note" id="topoRule"></div>
+  </section>
+
+  <section class="card">
+    <h2>同一批帧，两根管子的字节成本</h2>
+    <p class="sub">body 是一样的，差别全在管子的包装上。</p>
+    <table id="wireTable"><thead><tr><th>帧</th><th class="num">body</th><th class="num">stdio 线缆</th><th class="num">HTTP 线缆</th></tr></thead><tbody></tbody></table>
+    <div class="note" id="wireNote"></div>
+  </section>
+
+  <section class="card">
+    <h2>分帧器实验台</h2>
+    <p class="sub">stdio 上「一帧到哪里结束」是你要自己解决的。改切片大小、或者把紧凑 JSON 换成缩进 JSON，看它怎么变。</p>
+    <div class="row">
+      <label>切片大小</label>
+      <select id="chunkSize" style="width:150px">
+        <option value="0">整段一次喂</option>
+        <option value="1">1 字节</option>
+        <option value="7" selected>7 字节</option>
+        <option value="20">20 字节</option>
+      </select>
+      <button id="btnPretty">换成缩进 JSON（危险）</button>
+      <button class="primary" id="btnSplit">喂进去</button>
+    </div>
+    <textarea id="splitInput" rows="4">{"jsonrpc":"2.0","id":1,"method":"tools/list"}
+</textarea>
+    <div class="steps" id="splitSteps" style="margin-top:12px"></div>
+    <pre id="splitOut">点「喂进去」看结果。</pre>
+  </section>
+
+  <section class="card">
+    <h2>HTTP 上的会话绑定</h2>
+    <p class="sub">stdio 里「一条连接 = 一份状态」是白送的。HTTP 里每个请求都是新的，只能靠 session id 串回去。</p>
+    <div class="row"><button class="primary" id="btnSession">跑一遍</button></div>
+    <pre id="sessionOut">点「跑一遍」。</pre>
+  </section>
+
+  <section class="card">
+    <h2>一条完整的 stdio 会话</h2>
+    <p class="sub">四帧走完一遍，最后关掉 stdin —— 服务端必须自己退出。</p>
+    <div class="row"><button class="primary" id="btnStdio">跑一遍</button></div>
+    <pre id="stdioOut">点「跑一遍」。</pre>
+  </section>
+
+  <div class="foot">8047 · 离线自检见 <code>python main.py</code></div>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+function banner(msg, kind){
+  const el = $('banner');
+  el.textContent = msg;
+  el.className = 'banner' + (kind ? ' ' + kind : '');
+  el.style.display = msg ? 'block' : 'none';
+}
+
+async function getJSON(url, opts){
+  const r = await fetch(url, opts);
+  if(!r.ok) throw new Error(url + ' → ' + r.status + ' ' + (await r.text()).slice(0,160));
+  return r.json();
+}
+
+async function loadTopology(){
+  try{
+    const d = await getJSON('/api/topology');
+    $('layers').innerHTML = d.layers.map(l => `
+      <div class="layer">
+        <h3>${esc(l.name)}</h3>
+        <div class="k">负责</div>
+        <ul>${l.owns.map(x => `<li>${esc(x)}</li>`).join('')}</ul>
+        <div class="k">不负责</div>
+        <ul class="no">${l.does_not_own.map(x => `<li>${esc(x)}</li>`).join('')}</ul>
+        <div class="note" style="margin-top:9px">${esc(l.note)}</div>
+      </div>`).join('');
+    $('topoRule').textContent = d.rule;
+  }catch(e){ banner(e.message, 'bad'); }
+}
+
+async function loadWire(){
+  try{
+    const d = await getJSON('/api/wire');
+    const body = $('wireTable').querySelector('tbody');
+    body.innerHTML = d.stdio.map((s, i) => `
+      <tr>
+        <td><code>${esc(s.method)}</code></td>
+        <td class="num">${s.body}</td>
+        <td class="num">${s.wire}</td>
+        <td class="num">${d.http[i].wire}</td>
+      </tr>`).join('') + `
+      <tr>
+        <td><b>合计</b></td>
+        <td class="num">—</td>
+        <td class="num"><b>${d.stdio_total}</b></td>
+        <td class="num"><b>${d.http_total}</b></td>
+      </tr>`;
+    $('wireNote').textContent = `HTTP 多付 ${d.extra_bytes} 字节，是 stdio 的 ${d.ratio} 倍。${d.note}`;
+  }catch(e){ banner(e.message, 'bad'); }
+}
+
+$('btnPretty').onclick = () => {
+  const cur = $('splitInput').value;
+  try{
+    const obj = JSON.parse(cur.trim().split('\n')[0]);
+    $('splitInput').value = JSON.stringify(obj, null, 2) + '\n';
+    banner('现在是缩进 JSON。换行不再是帧边界，分帧器会把一帧切成残片。', 'warn');
+  }catch(e){ banner('先清成一行合法 JSON 再点。', 'bad'); }
+};
+
+$('btnSplit').onclick = async () => {
+  const text = $('splitInput').value;
+  const chunk_size = parseInt($('chunkSize').value, 10);
+  try{
+    const d = await getJSON('/api/splitter', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({text, chunk_size})
+    });
+    $('splitSteps').innerHTML = d.steps.map((s, i) => `
+      <div class="step ${s.error ? '' : 'on'}">
+        <b>#${i+1}</b>${s.bytes} B → ${s.frames} 帧残留 ${s.pending ?? 0} B
+      </div>`).join('');
+    if(d.error){
+      $('splitOut').textContent = '分帧失败：' + d.error;
+      banner('缩进 JSON 里全是换行 —— 第一个换行处被当成帧结尾，剩下的是半个 JSON。', 'bad');
+    }else{
+      $('splitOut').textContent = JSON.stringify({
+        输入字节: d.input_bytes, 切片数: d.chunks, 切出帧数: d.frame_count,
+        残留字节: d.pending_bytes, 帧: d.frames
+      }, null, 2);
+      banner(d.pending_bytes > 0
+        ? `切出 ${d.frame_count} 帧，但末尾还有 ${d.pending_bytes} 字节没凑成整帧 —— 对面写了个半帧。`
+        : `切出 ${d.frame_count} 帧，没有残留。`, d.pending_bytes > 0 ? 'warn' : 'ok');
+    }
+  }catch(e){ banner(e.message, 'bad'); }
+};
+
+$('btnSession').onclick = async () => {
+  try{
+    const d = await getJSON('/api/session-demo');
+    $('sessionOut').textContent = JSON.stringify(d, null, 2);
+    banner(`带上 session id：${d.with_id.requests} 次请求都落在同一个会话。不带：被拒，rejected 从 ${d.rejected_before} 涨到 ${d.rejected_after}。`, 'ok');
+  }catch(e){ banner(e.message, 'bad'); }
+};
+
+$('btnStdio').onclick = async () => {
+  try{
+    const {transcript} = await getJSON('/api/stdio-session');
+    $('stdioOut').textContent = transcript.map((t, i) => {
+      if(!t.sent) return `#${i+1} 关闭 stdin → 退出原因：${t.exit_reason}`;
+      const sent = JSON.stringify(t.sent);
+      const resp = t.response ? JSON.stringify(t.response) : '（通知，无响应）';
+      return `#${i+1} → ${sent}\n    发出 ${t.sent_bytes} B，服务端循环 ${t.server_loops} 次\n    ← ${resp}`;
+    }).join('\n\n');
+    banner('四帧走完。最后一步关掉 stdin，服务端读到 EOF 自己退出 —— 不退出就是僵尸进程。', 'ok');
+  }catch(e){ banner(e.message, 'bad'); }
+};
+
+loadTopology();
+loadWire();
+</script>
+</body>
+</html>

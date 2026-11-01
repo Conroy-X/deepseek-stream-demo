@@ -39,9 +39,73 @@
 ├── unit13-llm-engineering/    # ✅ Unit 13  Timeout / Retry / Rate Limit
 ├── unit14-project1/           # ✅ Unit 14  项目 1 收口：AI Chat 完整版
 ├── unit15-embedding/          # ✅ Unit 15  Embedding + 余弦相似度 + Top-K
+├── unit16-pgvector/           # Unit 16  pgvector + HNSW / IVFFlat
+├── unit17-doc-parsing/        # ✅ Unit 17  PDF / MD / TXT / DOCX 文档解析
+├── unit18-chunking/           # ✅ Unit 18  固定 / 递归 / 语义切块
+├── unit19-vector-search/      # ✅ Unit 19  Top-K 向量检索与召回评测
+├── unit20-basic-rag/          # ✅ Unit 20  检索增强生成最小闭环
+├── unit21-citation/           # ✅ Unit 21  来源引用与页码定位
+├── unit22-knowledge-base/     # ✅ Unit 22  知识库上传 / 列表 / 删除
+├── unit23-doc-pipeline/       # ✅ Unit 23  文档解析切块后台流水线
+├── unit24-embedding-pipeline/ # ✅ Unit 24  批量向量化与断点续跑
+├── unit25-retriever/          # ✅ Unit 25  可配置 Retriever 模块
+├── unit26-reranker/           # ✅ Unit 26  Rerank 重排与效果对比
+├── unit27-rag-streaming/      # ✅ Unit 27  RAG Chat 流式输出
+├── unit28-citation-ui/        # ✅ Unit 28  引用高亮与原文定位 UI
+├── unit29-rag-engineering/    # ✅ Unit 29  权限 / 日志 / 成本 / 安全
+├── unit30-project2/           # ✅ Unit 30  项目 2：企业知识库 AI 交付
+├── unit31-function-calling/   # ✅ Unit 31  Function Calling 入门
+├── unit32-schema/             # ✅ Unit 32  参数 Schema
+├── unit33-tool-result/        # ✅ Unit 33  Tool Result 回填
+├── unit34-agent-loop/         # ✅ Unit 34  Agent Loop
+├── unit35-multi-tool/         # ✅ Unit 35  Multi Tool 路由
+├── unit36-agent-errors/       # ✅ Unit 36  Agent 错误处理
+├── unit37-langgraph-state/    # ✅ Unit 37  LangGraph State（TypedDict + merge）
+├── unit38-node-edge/          # ✅ Unit 38  Node / Edge（多节点 + stream）
+├── unit39-conditional-edge/   # ✅ Unit 39  Conditional Edge（条件路由）
+├── unit40-checkpoint/         # ✅ Unit 40  Checkpoint / Memory（interrupt）
+├── unit41-search-tool/        # ✅ Unit 41  Search Tool（离线 fixture）
+├── unit42-fetch-tool/         # ✅ Unit 42  Fetch Tool（HTML 清洗）
+├── unit43-extract/            # ✅ Unit 43  Extract（结构化要点提取）
+├── unit44-analysis/           # ✅ Unit 44  Analysis（多来源交叉比对）
+├── unit45-project3/           # ✅ Unit 45  项目 3 交付（Research Agent）
+├── unit46-mcp-intro/          # ✅ Unit 46  MCP 协议手写（JSON-RPC 帧）
+├── unit47-architecture/       # ✅ Unit 47  架构与传输（stdio / HTTP）
+├── unit48-capabilities/       # ✅ Unit 48  三大能力（Tools/Resources/Prompts）
+├── unit49-first-server/       # ✅ Unit 49  第一个 Server（SDK 2.x）
+├── unit50-useful-tools/       # ✅ Unit 50  自定义 Tool
+├── unit51-resource/           # ✅ Unit 51  Resource 只读数据
+├── unit52-database-tool/      # ✅ Unit 52  Database Tool（只读连接 vs 词法）
+├── unit53-agent-mcp/          # ✅ Unit 53  Agent + MCP（schema 转换）
+├── unit54-multi-mcp/          # ✅ Unit 54  多 MCP Server（前缀 + 降级）
+├── unit55-mcp-sql-mvp/        # ✅ Unit 55  项目 4 MVP（NL→SQL 端到端）
+├── unit56-nl2sql/             # ✅ Unit 56  NL→SQL（schema 注入 + 方言）
+├── unit57-sql-security/       # ✅ Unit 57  SQL 安全四道闸
+├── unit58-error-recovery/     # ✅ Unit 58  Error Recovery（错误自愈）
+├── unit59-mcp-ops/            # ✅ Unit 59  MCP 工程化（日志/超时/并发/错误码）
+├── unit60-project4/           # ✅ Unit 60  项目 4 交付（ARCHITECTURE/SECURITY/DEMO）
 ├── experiments/               # 🧪 课程外的试用（Search/Fetch API、零依赖）
 └── README.md
 ```
+
+> **Unit 17–31 已按 Unit 1–16 的同一标准重做完毕。** 每个单元都是可运行实现，不是骨架：
+> `main.py` 末尾带离线自检（`uv run python main.py` 打印 `结果：N 通过 / 0 失败`），
+> `static/index.html` 是可操作实验台，`README.md` 走「完成标准 / 快速开始 / 自检 / 这个目录里有什么 /
+> 实测 / 接口 / 常见坑 / 验收清单 / 下一单元」，`notes.md` 里每个数字都是实跑出来的。
+> **自检全绿不等于学完**，标准是能讲清 `notes.md` 里的取舍。
+
+| 单元 | 自检条数 | 单元 | 自检条数 |
+| --- | ---: | --- | ---: |
+| 17 文档解析 | 30 | 25 Retriever | 36 |
+| 18 切块 | 29 | 26 Rerank | 19 |
+| 19 向量检索 | 72 | 27 流式输出 | 51 |
+| 20 基础 RAG | 64 | 28 引用 UI | 55 |
+| 21 引用校验 | 64 | 29 工程化与安全 | 84 |
+| 22 知识库 | 86 | 30 项目 2 | 21 |
+| 23 文档流水线 | 67 | 31 Function Calling | 30 |
+| 24 向量化流水线 | 67 | **合计** | **775** |
+
+> 端口约定：Unit N → `80NN`（17→8017 … 31→8031）。全部离线可跑，不需要 API key。
 
 > 四个 project 不再单独建目录：项目 1 收在 `unit14-project1/`，
 > 项目 2（企业知识库 RAG）由 Unit 15–30 逐单元累积而成。
@@ -51,7 +115,7 @@
 
 | 仓库 | 内容 | 状态 |
 | --- | --- | --- |
-| [Conroy-X/deepseek-stream-demo](https://github.com/Conroy-X/deepseek-stream-demo) | 本工程全部代码：`unit01-fastapi/` ~ `unit15-embedding/` 十五个学习单元 + 根目录流式 Demo（`main.py`）+ 学习文档（`docs/`） | ✅ 已同步 |
+| [Conroy-X/deepseek-stream-demo](https://github.com/Conroy-X/deepseek-stream-demo) | 本工程全部代码：`unit01-fastapi/` ~ `unit60-project4/` 六十个学习单元 + 根目录流式 Demo（`main.py`）+ 学习文档（`docs/`） | ✅ 已同步 |
 
 > **`~/ai-journey` 就是本仓库的工作副本**（git 仓库根目录即此处），远端是 `git@github.com:Conroy-X/deepseek-stream-demo.git`。
 > 推送走 **SSH**（`ssh -T git@github.com` 已验证为 `Conroy-X`）；`~/projects/deepseek-stream-demo` 是早期克隆，已与远端同步。

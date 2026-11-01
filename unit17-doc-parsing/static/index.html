@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Unit 17 · 文档解析实验台</title>
+<style>
+  :root{--bg:#f7f7f5;--card:#fff;--line:#e3e2de;--text:#23231f;--dim:#7a7972;--accent:#185FA5;--ok:#0F6E56;--bad:#A32D2D;--warn:#854F0B}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font:14px/1.65 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;padding:20px}
+  .wrap{max-width:1000px;margin:0 auto}
+  h1{font-size:19px;font-weight:600}h2{font-size:13px;font-weight:600;color:var(--dim);margin-bottom:11px;letter-spacing:.02em}
+  .sub{color:var(--dim);font-size:13px;margin:4px 0 16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:15px;margin-bottom:14px}
+  button{padding:7px 13px;border:1px solid var(--line);border-radius:7px;background:#fff;font:inherit;font-size:13px;cursor:pointer;color:var(--text)}
+  button:hover{background:#f0efec}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{background:#0C447C}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .banner{padding:9px 13px;border-radius:8px;font-size:13px;margin-bottom:14px;border:1px solid var(--line);background:var(--card)}
+  .banner.ok{border-color:#9FE1CB;background:#E1F5EE;color:var(--ok)}
+  .banner.warn{border-color:#FAC775;background:#FAEEDA;color:var(--warn)}
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
+  .stat{border:1px solid var(--line);border-radius:9px;padding:10px 12px}
+  .stat b{display:block;font-size:20px;font-weight:600;letter-spacing:-.01em}
+  .stat span{font-size:12px;color:var(--dim)}
+  pre{background:#fbfbf9;border:1px solid var(--line);border-radius:9px;padding:12px;font:12.5px/1.75 ui-monospace,"Cascadia Code",monospace;white-space:pre-wrap;word-break:break-word;max-height:420px;overflow:auto}
+  .warnlist{font-size:12.5px;color:var(--warn);background:#FAEEDA;border:1px solid #FAC775;border-radius:8px;padding:8px 12px;margin-bottom:12px}
+  .warnlist div+div{margin-top:4px}
+  .err{color:var(--bad);font-size:12.5px}
+  .tag{display:inline-block;font-size:11.5px;padding:1px 7px;border-radius:20px;border:1px solid var(--line);color:var(--dim)}
+  input[type=file]{font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Unit 17 · 文档解析实验台</h1>
+  <div class="sub">PDF / Markdown / TXT / HTML / CSV / DOCX → 同一种 text + pages + meta</div>
+
+  <div class="banner" id="health">探测后端…</div>
+
+  <div class="card">
+    <h2>① 选一个内置样例，或上传自己的文件</h2>
+    <div class="row" id="samples"></div>
+    <div class="row" style="margin-top:10px">
+      <input type="file" id="file">
+      <button class="primary" onclick="upload()">上传并解析</button>
+    </div>
+  </div>
+
+  <div id="out"></div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+async function getJSON(url, opt) {
+  const r = await fetch(url, opt);
+  const body = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(body.detail || ("HTTP " + r.status));
+  return body;
+}
+
+async function loadHealth() {
+  const b = $("health");
+  try {
+    const h = await getJSON("health");
+    const missing = Object.entries(h.optional_deps).filter(([, v]) => !v).map(([k]) => k);
+    b.className = missing.length ? "banner warn" : "banner ok";
+    b.textContent = missing.length
+      ? `支持 ${h.supported.length} 种格式，但缺 ${missing.join(" / ")} —— 对应的文件会明确报错，不会静默失败`
+      : `支持 ${h.supported.length} 种格式，PDF / DOCX 解析器已就绪`;
+    $("samples").innerHTML = h.samples
+      .map(n => `<button onclick="pick('${n}')">${esc(n)}</button>`).join("");
+  } catch (e) {
+    b.className = "banner warn";
+    b.textContent = "后端没响应：" + e.message;
+  }
+}
+
+function pick(name) {
+  load("/sample?name=" + encodeURIComponent(name));
+}
+
+async function upload() {
+  const f = $("file").files[0];
+  if (!f) return alert("先选一个文件");
+  const fd = new FormData();
+  fd.append("file", f);
+  load("/parse", { method: "POST", body: fd });
+}
+
+async function load(url, opt) {
+  $("out").innerHTML = '<div class="card"><span class="tag">解析中…</span></div>';
+  try {
+    const d = await getJSON(url, opt);
+    render(d);
+  } catch (e) {
+    $("out").innerHTML = `<div class="card"><div class="err">解析失败：${esc(e.message)}</div></div>`;
+  }
+}
+
+function render(d) {
+  const warns = d.warnings && d.warnings.length
+    ? `<div class="warnlist">${d.warnings.map(w => `<div>· ${esc(w)}</div>`).join("")}</div>` : "";
+  const pages = d.pages.map(p => `<span class="tag">第${p.no}页 · ${p.chars}字</span>`).join(" ");
+  $("out").innerHTML = `
+    <div class="card">
+      <h2>② 统一结构（下游单元只认这个）</h2>
+      <div class="grid">
+        <div class="stat"><b>${d.kind}</b><span>格式</span></div>
+        <div class="stat"><b>${d.chars}</b><span>字符数</span></div>
+        <div class="stat"><b>${d.page_count}</b><span>页数</span></div>
+        <div class="stat"><b>${d.warnings.length}</b><span>警告</span></div>
+      </div>
+      <div style="margin-bottom:10px">${pages}</div>
+      ${warns}
+      <div class="row" style="margin-bottom:8px">
+        <span class="tag">${esc(d.name)}</span>
+        ${Object.entries(d.meta).map(([k, v]) => `<span class="tag">${k}=${esc(v)}</span>`).join(" ")}
+      </div>
+      <h2 style="margin-top:14px">③ 提取出的正文</h2>
+      <pre>${esc(d.text)}</pre>
+      <div style="font-size:12.5px;color:var(--dim);margin-top:8px">
+        注意页数是"解析器能给出的最大粒度"：PDF 有真实分页，DOCX 没有固定分页，所以整篇算 1 页。
+      </div>
+    </div>`;
+}
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+loadHealth();
+pick("员工手册.md");
+</script>
+</body>
+</html>

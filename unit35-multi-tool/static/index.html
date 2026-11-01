@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Unit 35 · 多工具路由实验台</title>
+<style>
+  :root{--bg:#f7f7f5;--card:#fff;--line:#e3e2de;--text:#23231f;--dim:#7a7972;--accent:#185FA5;--ok:#0F6E56;--bad:#A32D2D;--warn:#854F0B}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font:14px/1.65 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;padding:20px}
+  .wrap{max-width:1040px;margin:0 auto}
+  h1{font-size:19px;font-weight:600}h2{font-size:13px;font-weight:600;color:var(--dim);margin-bottom:11px}
+  .sub{color:var(--dim);font-size:13px;margin:4px 0 16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:15px;margin-bottom:14px}
+  button{padding:7px 13px;border:1px solid var(--line);border-radius:7px;background:#fff;font:inherit;font-size:13px;cursor:pointer;color:var(--text)}
+  button:hover{background:#f0efec}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  input{padding:8px 11px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:13.5px;background:#fff;color:var(--text)}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .banner{padding:9px 13px;border-radius:8px;font-size:13px;margin-bottom:14px;border:1px solid var(--line);background:var(--card)}
+  .banner.ok{border-color:#9FE1CB;background:#E1F5EE;color:var(--ok)}
+  .banner.bad{border-color:#F5C4C4;background:#FCEBEB;color:var(--bad)}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media(max-width:860px){.grid{grid-template-columns:1fr}}
+  .tool{border:1px solid var(--line);border-radius:9px;padding:9px 12px;margin-bottom:8px;background:#fbfbf9}
+  .tool.picked{border-color:var(--accent);background:#F4F9FE}
+  pre{font:11.5px/1.65 ui-monospace,"Cascadia Code",monospace;white-space:pre-wrap;word-break:break-word;background:#fff;border:1px solid var(--line);border-radius:7px;padding:8px;max-height:220px;overflow:auto;margin-top:5px}
+  details summary{cursor:pointer;font-size:12px;color:var(--dim)}
+  .tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:20px;border:1px solid var(--line);color:var(--dim)}
+  .tag.ok{background:#E1F5EE;border-color:#9FE1CB;color:var(--ok)}
+  .tag.bad{background:#FCEBEB;border-color:#F5C4C4;color:var(--bad)}
+  .tag.warn{background:#FAEEDA;border-color:#FAC775;color:var(--warn)}
+  .err{color:var(--bad);font-size:12.5px}
+  .note{font-size:12.5px;color:var(--warn);background:#FAEEDA;border:1px solid #FAC775;border-radius:8px;padding:8px 12px;margin-top:10px}
+  .ans{background:#E1F5EE;border:1px solid #9FE1CB;border-radius:9px;padding:10px 13px;font-size:14px;color:#0B4F3D;margin-top:10px}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th,td{text-align:left;padding:5px 8px;border-bottom:1px solid var(--line)}
+  th{color:var(--dim);font-weight:600}
+  td.mono{font-family:ui-monospace,monospace}
+  .hit{display:inline-block;font:11px ui-monospace,monospace;background:#E6F1FB;color:var(--accent);border-radius:4px;padding:1px 5px;margin:1px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Unit 35 · 多工具路由实验台</h1>
+  <div class="sub">五个工具、一次可以返回多个 tool_calls —— 难的不再是执行，是选对</div>
+
+  <div class="banner" id="health">探测后端…</div>
+
+  <div class="card">
+    <div class="row">
+      <input id="q" style="flex:1" value="100 美元能换多少人民币">
+      <button class="primary" onclick="go()">问</button>
+      <button onclick="quick('上海和北京今天多少度')">并行两个城市</button>
+      <button onclick="quick('深圳到北京的机票多少钱')">没有对应工具</button>
+      <button onclick="quick('5 公里是多少米')">单位换算</button>
+    </div>
+    <div id="why" style="margin-top:12px"></div>
+    <div id="out"></div>
+  </div>
+
+  <div class="grid">
+    <div class="card"><h2>工具清单（模型只能看到这些）</h2><div id="tools"></div></div>
+    <div class="card"><h2>路由准确率：10 道固定问题</h2><div id="bench"></div></div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+async function j(path, opt) {
+  const r = await fetch(path, opt);
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.detail || ("HTTP " + r.status));
+  return d;
+}
+const post = (p, body) => j(p, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+
+async function boot() {
+  try {
+    const h = await j("health");
+    $("health").className = "banner ok";
+    $("health").textContent = `后端就绪 · 五个工具：${h.tools.join(" / ")} · 模型：${h.model}`;
+    await Promise.all([loadTools(), loadBench()]);
+    go();
+  } catch (e) {
+    $("health").className = "banner bad";
+    $("health").textContent = "后端没响应：" + e.message;
+  }
+}
+
+async function loadTools() {
+  const d = await j("tools");
+  $("tools").innerHTML = d.tools.map(t => {
+    const f = t.function;
+    return `<div class="tool" id="tool-${esc(f.name)}">
+      <div><b>${esc(f.name)}</b> <span class="tag">${esc((f.parameters.required || []).join(", "))} 必填</span></div>
+      <div style="font-size:12.5px;color:var(--dim);margin:3px 0">${esc(f.description || "（没有 description）")}</div>
+      <details><summary>parameters</summary><pre>${esc(JSON.stringify(f.parameters, null, 2))}</pre></details>
+    </div>`;
+  }).join("");
+}
+
+async function loadBench() {
+  const d = await j("bench");
+  $("bench").innerHTML = `<table><thead><tr><th>配置</th><th>命中</th><th>准确率</th></tr></thead><tbody>
+    ${d.cases.map(c => `<tr><td>${esc(c.label)}</td><td class="mono">${c.correct}/${c.total}</td>
+      <td class="mono" style="color:${c.correct >= 9 ? "var(--ok)" : c.correct >= 6 ? "var(--warn)" : "var(--bad)"}">${c.rate}</td></tr>`).join("")}
+    </tbody></table>
+    <div class="note">同一批 10 道题，只改描述。工具名是英文的，中文问题在名字上一点交集都没有。</div>`;
+}
+
+function quick(t) { $("q").value = t; go(); }
+
+async function go() {
+  const q = $("q").value.trim();
+  if (!q) return;
+  try {
+    const [r, a] = await Promise.all([post("route", { question: q }), post("ask", { question: q })]);
+    document.querySelectorAll(".tool").forEach(el => el.classList.remove("picked"));
+    (a.calls || []).forEach(c => { const el = $("tool-" + c.name); if (el) el.classList.add("picked"); });
+
+    $("why").innerHTML = `<h2>为什么选它（词面命中，IDF 加权）</h2>
+      <table><thead><tr><th>候选</th><th>分数</th><th>命中的片段</th></tr></thead><tbody>
+      ${r.detail.map(d => `<tr><td class="mono">${esc(d.name)}${d.name === r.picked ? ' <span class="tag ok">选中</span>' : ""}</td>
+        <td class="mono">${d.score}</td><td>${d.hits.map(h => `<span class="hit">${esc(h)}</span>`).join("") || '<span style="color:var(--dim)">无命中</span>'}</td></tr>`).join("")}
+      </tbody></table>
+      ${r.picked ? "" : '<div class="note">所有候选分数都是 0 —— 没有工具能接住这个问题。正确做法是直接回答「没有合适工具」，而不是硬塞一个。</div>'}`;
+
+    const callRows = (a.calls || []).map((c, i) => {
+      const res = a.results[i];
+      return `<div class="tool ${res.ok ? "" : "picked"}"><div class="hd">
+        <span class="tag ${res.ok ? "ok" : "bad"}">${res.ok ? "ok" : "失败"}</span>
+        <b>${esc(c.name)}</b> <span class="mono">${esc(JSON.stringify(c.args))}</span>
+        <span style="font-size:11.5px;color:var(--dim)">${res.ms} ms · id=${esc(c.id)}</span></div>
+        <div style="font-size:12.5px;word-break:break-all">${esc(res.content)}</div></div>`;
+    }).join("");
+
+    $("out").innerHTML = `<h2 style="margin-top:14px">执行了 ${(a.calls || []).length} 个调用（并行，按 id 回填）</h2>
+      ${callRows || '<div class="err">没有调用任何工具</div>'}
+      <div class="ans"><b>回答：</b>${esc(a.answer)}</div>
+      ${a.unanswered && a.unanswered.length ? `<div class="note">有悬空 tool_call：${esc(a.unanswered.join(", "))}</div>` : ""}`;
+  } catch (e) {
+    $("out").innerHTML = `<div class="err">失败：${esc(e.message)}</div>`;
+  }
+}
+
+boot();
+</script>
+</body>
+</html>

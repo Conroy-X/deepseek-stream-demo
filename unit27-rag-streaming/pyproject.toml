@@ -1,0 +1,13 @@
+[project]
+name = "unit27-rag-streaming"
+version = "0.1.0"
+description = "Unit 27：检索 + 上下文预算 + SSE 流式输出（meta / token / done / error）"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi[standard]>=0.115",
+    "httpx>=0.27",
+    "python-dotenv>=1.0",
+]
+
+[tool.uv]
+package = false

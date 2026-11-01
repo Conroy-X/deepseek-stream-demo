@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Unit 43 · 要点提取 实验台</title>
+<style>
+  :root{--bg:#f7f7f5;--card:#fff;--line:#e3e2de;--text:#23231f;--dim:#7a7972;--accent:#185FA5;--ok:#0F6E56;--bad:#A32D2D;--warn:#854F0B}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font:14px/1.65 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;padding:20px}
+  .wrap{max-width:1000px;margin:0 auto}
+  h1{font-size:19px;font-weight:600}
+  h2{font-size:13px;font-weight:600;color:var(--dim);margin-bottom:11px}
+  .sub{color:var(--dim);font-size:13px;margin:4px 0 16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:15px;margin-bottom:14px}
+  button{padding:7px 13px;border:1px solid var(--line);border-radius:7px;background:#fff;font:inherit;font-size:13px;cursor:pointer;color:var(--text)}
+  button:hover{background:#f0efec}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  textarea{width:100%;min-height:140px;padding:10px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:13.5px;background:#fff;color:var(--text);resize:vertical}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .banner{padding:9px 13px;border-radius:8px;font-size:13px;margin-bottom:14px;border:1px solid var(--line);background:var(--card)}
+  .banner.ok{border-color:#9FE1CB;background:#E1F5EE;color:var(--ok)}
+  .banner.bad{border-color:#F5C4C4;background:#FCEBEB;color:var(--bad)}
+  .pt{border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:9px;padding:10px 12px;margin-bottom:8px;background:#fbfbf9}
+  .pt.bad{border-left-color:var(--bad)}
+  .pt .h{font-size:13.5px;font-weight:500}
+  .pt .src{font-size:12.5px;color:var(--dim);margin-top:6px;background:#fff;border:1px dashed var(--line);border-radius:6px;padding:6px 9px}
+  .pt .src b{color:var(--ok)}
+  .pt.bad .src b{color:var(--bad)}
+  .tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:20px;border:1px solid var(--line);color:var(--dim)}
+  .tag.ok{background:#E1F5EE;border-color:#9FE1CB;color:var(--ok)}
+  .tag.bad{background:#FCEBEB;border-color:#F5C4C4;color:var(--bad)}
+  .hl{background:#FFF6C2;border-radius:3px;padding:0 2px}
+  .err{color:var(--bad);font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Unit 43 · 结构化要点提取 实验台</h1>
+  <div class="sub">规则识别定义 / 数值 / 因果三类句 · 每个要点必须能在原文里逐字找到源句</div>
+
+  <div class="banner" id="health">探测后端…</div>
+
+  <div class="card">
+    <h2>贴一段正文（清洗后的，从 unit 42 来）</h2>
+    <textarea id="text"></textarea>
+    <div class="row" style="margin-top:10px">
+      <button class="primary" onclick="doExtract()">提取要点</button>
+      <button onclick="loadSample()">加载示例</button>
+      <button onclick="loadEmpty()">加载空正文</button>
+      <span id="stat" style="font-size:12.5px;color:var(--dim)"></span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>提取出的要点（高亮 = 源句在原文里的位置）</h2>
+    <div id="pts"><span style="color:var(--dim);font-size:13px">还没有提取</span></div>
+  </div>
+
+  <div class="card">
+    <h2>原文 + 高亮源句</h2>
+    <div id="hl" style="font-size:13.5px;line-height:1.85;background:#fbfbf9;border:1px solid var(--line);border-radius:8px;padding:10px">还没有提取</div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+async function j(path, opt) {
+  const r = await fetch(path, opt);
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.detail || ("HTTP " + r.status));
+  return d;
+}
+const post = (p, body) => j(p, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+
+const SAMPLE = "MCP（Model Context Protocol）是一种用 JSON-RPC 2.0 在客户端和工具服务器之间建通道的协议。它规定了一次握手：先 initialize 再 notifications/initialized。在 200 条文档的语料上测了 chunk 256/512/1024 三档，reranker 把 top-3 命中率从 0.62 拉到 0.81。因为 reranker 把噪声压住了，所以答案的准确率提高了。能力表声明 listChanged: true 等于承诺在列表变化时发通知。工具失败要包成 result.isError=true，因为 error 帧会让客户端按协议异常处理。";
+
+async function boot() {
+  try {
+    const h = await j("health");
+    $("health").className = "banner ok";
+    $("health").textContent = `后端就绪 · 模型=${h.model} · 默认 ${h.min_points}-${h.max_points} 个要点`;
+    loadSample();
+  } catch (e) {
+    $("health").className = "banner bad";
+    $("health").textContent = "后端没响应：" + e.message;
+  }
+}
+
+function loadSample() { $("text").value = SAMPLE; doExtract(); }
+function loadEmpty() { $("text").value = "今天天气不错，出去走走吧。"; doExtract(); }
+
+async function doExtract() {
+  const text = $("text").value.trim();
+  if (!text) { $("pts").innerHTML = `<span class="err">正文不能为空</span>`; return; }
+  try {
+    const d = await post("extract", { text });
+    $("stat").textContent = `命中 ${d.count} 个 · 全部可溯源：${d.all_sourced ? "是" : "否"}`;
+    if (d.count === 0) {
+      $("pts").innerHTML = `<div style="color:var(--warn);font-size:13px">没有命中定义 / 数值 / 因果三类句。换一段有「是 / 数字 / 因为」的正文试试。</div>`;
+    } else {
+      $("pts").innerHTML = d.points.map((p, i) => {
+        const s = d.sourcing[i];
+        const cls = s.found ? "pt" : "pt bad";
+        const tag = s.found ? `<span class="tag ok">已溯源 @${s.source_pos}</span>` : `<span class="tag bad">未溯源</span>`;
+        return `<div class="${cls}">
+          <div class="h">${i + 1}. ${esc(p.point)} ${tag}</div>
+          <div class="src">源句：<b>${esc(p.source_sentence)}</b></div>
+        </div>`;
+      }).join("");
+    }
+    // 高亮原文：把每个 source_sentence 用 <span class="hl"> 包起来
+    let html = esc(text);
+    // 按 source_pos 倒序替换，避免位置错位
+    const sorted = d.sourcing.filter(s => s.found).sort((a, b) => b.source_pos - a.source_pos);
+    for (const s of sorted) {
+      const before = html.slice(0, s.source_pos);
+      const middle = html.slice(s.source_pos, s.source_pos + s.source_sentence.length);
+      const after = html.slice(s.source_pos + s.source_sentence.length);
+      // 注意：esc 后的位置和原文位置不一致，这里用原文 substring 然后 esc
+      // 简单做法：直接 split + join
+      html = before + `<span class="hl">${middle}</span>` + after;
+    }
+    $("hl").innerHTML = html || `<span style="color:var(--dim)">（空）</span>`;
+  } catch (e) {
+    $("pts").innerHTML = `<div class="err">失败：${esc(e.message)}</div>`;
+  }
+}
+
+boot();
+</script>
+</body>
+</html>

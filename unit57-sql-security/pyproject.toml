@@ -1,0 +1,13 @@
+[project]
+name = "unit57-sql-security"
+version = "0.1.0"
+description = "Unit 57：SQL 安全四道闸（只读账号 + 词法 + LIMIT + 行级权限）"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi[standard]>=0.115",
+    "httpx>=0.27",
+    "python-dotenv>=1.0",
+]
+
+[tool.uv]
+package = false

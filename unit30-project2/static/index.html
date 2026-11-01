@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Unit 30 · 企业知识库</title>
+<style>
+  :root{--bg:#f7f7f5;--card:#fff;--line:#e3e2de;--text:#23231f;--dim:#7a7972;--accent:#185FA5;--ok:#0F6E56;--bad:#A32D2D;--warn:#854F0B}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font:14px/1.65 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;padding:20px}
+  .wrap{max-width:1080px;margin:0 auto}
+  h1{font-size:19px;font-weight:600}h2{font-size:13px;font-weight:600;color:var(--dim);margin-bottom:11px}
+  .sub{color:var(--dim);font-size:13px;margin:4px 0 16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:15px;margin-bottom:14px}
+  button{padding:7px 13px;border:1px solid var(--line);border-radius:7px;background:#fff;font:inherit;font-size:13px;cursor:pointer;color:var(--text)}
+  button:hover{background:#f0efec}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  input{padding:8px 11px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:13.5px;background:#fff;color:var(--text)}
+  .banner{padding:9px 13px;border-radius:8px;font-size:13px;margin-bottom:14px;border:1px solid var(--line);background:var(--card)}
+  .banner.ok{border-color:#9FE1CB;background:#E1F5EE;color:var(--ok)}
+  .banner.warn{border-color:#FAC775;background:#FAEEDA;color:var(--warn)}
+  .cols{display:grid;grid-template-columns:1.5fr 1fr;gap:14px}
+  .ans{font-size:14.5px;line-height:1.9}
+  .ans sup{color:var(--accent);font-size:11px;cursor:pointer;padding:0 1px}
+  .ans sup:hover{text-decoration:underline}
+  .cit{border:1px solid var(--line);border-radius:8px;padding:9px 11px;margin-bottom:8px;font-size:12.5px}
+  .cit .top{display:flex;gap:6px;align-items:center;color:var(--dim);font-size:11.5px;margin-bottom:4px}
+  .tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:20px;border:1px solid var(--line);color:var(--dim)}
+  .tag.on{background:#E1F5EE;border-color:#9FE1CB;color:var(--ok)}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
+  th{font-size:11.5px;color:var(--dim)}
+  .err{color:var(--bad);font-size:12.5px}
+  .note{font-size:12.5px;color:var(--warn);background:#FAEEDA;border:1px solid #FAC775;border-radius:8px;padding:8px 12px;margin-top:10px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Unit 30 · 企业知识库问答</h1>
+  <div class="sub">上传 → 解析 → 切块 → 向量化 → 检索 → 重排 → 带引用回答</div>
+
+  <div class="banner" id="health">探测后端…</div>
+
+  <div class="card">
+    <div class="row">
+      <input id="file" type="file" style="flex:1">
+      <button onclick="upload()">上传入库</button>
+      <button onclick="seed()">灌入演示文档</button>
+      <button onclick="check()">交付检查</button>
+    </div>
+    <div id="ops" style="margin-top:10px"></div>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <input id="q" style="flex:1" value="年假要提前几天申请">
+      <button class="primary" onclick="ask()">提问</button>
+    </div>
+    <div class="cols" style="margin-top:12px">
+      <div id="answerBox"><div class="err">点「提问」看回答</div></div>
+      <div id="citeBox"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+async function j(path, opt) {
+  const r = await fetch(path, opt);
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.detail || ("HTTP " + r.status));
+  return d;
+}
+async function loadHealth() {
+  try {
+    const h = await j("health");
+    $("health").className = "banner ok";
+    $("health").textContent = `知识库 ${h.chunks} 个块 · 内置 ${h.docs} 份文档 · 评测 ${h.eval} 题`;
+  } catch (e) {
+    $("health").className = "banner warn";
+    $("health").textContent = "后端没响应：" + e.message;
+  }
+}
+async function seed() {
+  try {
+    const d = await j("seed", { method: "POST" });
+    $("ops").innerHTML = d.docs.map(x => `<div><span class="tag on">${x.name}</span> ${x.pages} 页 · ${x.chars} 字 · ${x.chunks} 块</div>`).join("");
+    loadHealth();
+  } catch (e) { $("ops").innerHTML = `<div class="err">${esc(e.message)}</div>`; }
+}
+async function upload() {
+  const f = $("file").files[0];
+  if (!f) return alert("先选文件");
+  const fd = new FormData(); fd.append("file", f);
+  try {
+    const d = await j("upload", { method: "POST", body: fd });
+    $("ops").innerHTML = `<div><span class="tag on">${esc(d.name)}</span> ${d.kind} · ${d.pages} 页 · ${d.chunks} 块${d.warnings.length ? " · 警告：" + d.warnings.map(esc).join("；") : ""}</div>`;
+    loadHealth();
+  } catch (e) { $("ops").innerHTML = `<div class="err">${esc(e.message)}</div>`; }
+}
+async function ask() {
+  const q = $("q").value.trim();
+  if (!q) return;
+  try {
+    const d = await j("ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: q }) });
+    const html = esc(d.answer).replace(/\[(\d+)\]/g, (m, n) =>
+      d.citations.some(c => c.id === +n) ? `<sup data-n="${n}">[${n}]</sup>` : m);
+    $("answerBox").innerHTML = `<h2>回答 ${d.refused ? '<span class="tag" style="color:#A32D2D;border-color:#F5C4C4">拒答</span>' : ""}</h2>
+      <div class="ans">${html}</div>
+      <div style="margin-top:10px;font-size:12px;color:var(--dim)">top1 向量分数 ${d.top_score}（拒答阈值 0.12）</div>`;
+    $("citeBox").innerHTML = `<h2>引用</h2>` + (d.citations.length ? d.citations.map(c => `
+      <div class="cit" id="cit-${c.id}">
+        <div class="top"><b>[${c.id}]</b> <span>${esc(c.source)}</span> <span>第 ${c.page} 页</span> <span class="tag">${c.chunk_id}</span></div>
+        <div>${esc(c.snippet)}</div>
+      </div>`).join("") : `<div class="err">没有引用（拒答时不该有）</div>`);
+    document.querySelectorAll(".ans sup").forEach(el => el.onclick = () => {
+      const t = document.getElementById("cit-" + el.dataset.n);
+      if (t) { t.scrollIntoView({ block: "center" }); t.style.background = "#FFF3C4"; setTimeout(() => t.style.background = "", 900); }
+    });
+  } catch (e) {
+    $("answerBox").innerHTML = `<div class="err">失败：${esc(e.message)}</div>`;
+  }
+}
+async function check() {
+  try {
+    const d = await j("check");
+    $("ops").innerHTML = `<div style="margin-bottom:6px"><b style="color:${d.pass ? "var(--ok)" : "var(--bad)"}">${d.pass ? "交付检查通过" : "交付检查未通过"}</b></div>
+      <table><tbody>${d.checks.map(c => `<tr><td>${c.pass ? "✓" : "✗"}</td><td>${esc(c.name)}</td><td style="color:var(--dim)">${esc(JSON.stringify(c.detail))}</td></tr>`).join("")}</tbody></table>`;
+  } catch (e) { $("ops").innerHTML = `<div class="err">${esc(e.message)}</div>`; }
+}
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+loadHealth();
+ask();
+</script>
+</body>
+</html>

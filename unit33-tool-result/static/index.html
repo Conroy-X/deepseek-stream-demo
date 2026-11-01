@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Unit 33 · Tool Result 回填实验台</title>
+<style>
+  :root{--bg:#f7f7f5;--card:#fff;--line:#e3e2de;--text:#23231f;--dim:#7a7972;--accent:#185FA5;--ok:#0F6E56;--bad:#A32D2D;--warn:#854F0B}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font:14px/1.65 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;padding:20px}
+  .wrap{max-width:1000px;margin:0 auto}
+  h1{font-size:19px;font-weight:600}h2{font-size:13px;font-weight:600;color:var(--dim);margin-bottom:11px}
+  .sub{color:var(--dim);font-size:13px;margin:4px 0 16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:15px;margin-bottom:14px}
+  button{padding:7px 13px;border:1px solid var(--line);border-radius:7px;background:#fff;font:inherit;font-size:13px;cursor:pointer;color:var(--text)}
+  button:hover{background:#f0efec}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  input{padding:8px 11px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:13.5px;background:#fff;color:var(--text)}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .banner{padding:9px 13px;border-radius:8px;font-size:13px;margin-bottom:14px;border:1px solid var(--line);background:var(--card)}
+  .banner.ok{border-color:#9FE1CB;background:#E1F5EE;color:var(--ok)}
+  .banner.bad{border-color:#F5C4C4;background:#FCEBEB;color:var(--bad)}
+  .msg{border:1px solid var(--line);border-radius:9px;padding:9px 12px;margin-bottom:7px;background:#fbfbf9}
+  .msg.tool{border-left:3px solid var(--accent)}
+  .msg.assistant{border-left:3px solid #9FE1CB}
+  .hd{font-size:11.5px;color:var(--dim);display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:4px}
+  pre{font:12px/1.7 ui-monospace,"Cascadia Code",monospace;white-space:pre-wrap;word-break:break-word;background:#fff;border:1px solid var(--line);border-radius:7px;padding:8px;max-height:260px;overflow:auto;margin-top:5px}
+  details summary{cursor:pointer;font-size:12px;color:var(--dim)}
+  .tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:20px;border:1px solid var(--line);color:var(--dim)}
+  .tag.ok{background:#E1F5EE;border-color:#9FE1CB;color:var(--ok)}
+  .tag.bad{background:#FCEBEB;border-color:#F5C4C4;color:var(--bad)}
+  .tag.warn{background:#FAEEDA;border-color:#FAC775;color:var(--warn)}
+  .err{color:var(--bad);font-size:12.5px}
+  .note{font-size:12.5px;color:var(--warn);background:#FAEEDA;border:1px solid #FAC775;border-radius:8px;padding:8px 12px;margin-top:10px}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th,td{text-align:left;padding:5px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--dim);font-weight:600}
+  td.mono{font-family:ui-monospace,monospace}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Unit 33 · Tool Result 回填实验台</h1>
+  <div class="sub">一次工具调用在 messages 里占两条消息，id 必须对上，content 必须是字符串</div>
+
+  <div class="banner" id="health">探测后端…</div>
+
+  <div class="card">
+    <div class="row">
+      <input id="q" style="flex:1" value="上海和北京的天气">
+      <button class="primary" onclick="turn()">发问</button>
+      <button onclick="quick('查一下我的订单')">试超大结果</button>
+      <button onclick="quick('你们公司叫什么')">不需要工具</button>
+    </div>
+    <div class="row" id="stat" style="margin-top:10px;font-size:12.5px;color:var(--dim)"></div>
+    <div id="msgs" style="margin-top:12px"></div>
+    <div class="row" id="actions" style="margin-top:10px"></div>
+    <div id="verdict" style="margin-top:10px"></div>
+  </div>
+
+  <div class="card">
+    <h2>五种坏数组 —— 校验器分别抓成什么（这是本章的核心）</h2>
+    <div class="row"><button onclick="loadBroken()">跑一遍</button></div>
+    <div id="broken" style="margin-top:12px"></div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const est = t => { const s = String(t || ""); const cjk = (s.match(/[\u4e00-\u9fa5]/g) || []).length; return cjk + Math.ceil((s.length - cjk) / 4); };
+async function j(path, opt) {
+  const r = await fetch(path, opt);
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.detail || ("HTTP " + r.status));
+  return d;
+}
+
+let last = null, revealed = 0;
+
+async function boot() {
+  try {
+    const h = await j("health");
+    $("health").className = "banner ok";
+    $("health").textContent = `后端就绪 · 工具：${h.tools.join(" / ")} · content 上限 ${h.limit} 字符`;
+    turn();
+  } catch (e) {
+    $("health").className = "banner bad";
+    $("health").textContent = "后端没响应：" + e.message;
+  }
+}
+
+function quick(t) { $("q").value = t; turn(); }
+
+function msgCard(m, i) {
+  const chars = (m.content || "").length;
+  const head = `<div class="hd"><span class="tag ${m.role === "tool" ? "ok" : ""}">${esc(m.role)}</span>
+    <span>#${i}</span>
+    ${m.tool_call_id ? `<span class="mono">tool_call_id=${esc(m.tool_call_id)}</span>` : ""}
+    ${m.name ? `<span class="mono">name=${esc(m.name)}</span>` : ""}
+    ${m.truncated ? `<span class="tag warn">已截断</span>` : ""}
+    <span>${chars} 字符 ≈ ${est(m.content)} token</span></div>`;
+  const body = m.tool_calls
+    ? `<pre>${esc(JSON.stringify(m.tool_calls, null, 2))}</pre>`
+    : `<div style="font-size:13px">${m.content === null || m.content === "" ? '<span class="err">（空）</span>' : esc(String(m.content).slice(0, 400))}${String(m.content || "").length > 400 ? "…" : ""}</div>`;
+  return `<div class="msg ${esc(m.role)}">${head}${m.content && String(m.content).length > 200
+    ? `<details><summary>展开完整 content（${chars} 字符）</summary><pre>${esc(m.content)}</pre></details>` : body}</div>`;
+}
+
+async function turn() {
+  const q = $("q").value.trim();
+  if (!q) return;
+  try {
+    last = await j("turn", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: q }) });
+    const asstIdx = last.messages.findIndex(m => m.role === "assistant" && m.tool_calls);
+    revealed = asstIdx < 0 ? last.messages.length : asstIdx + 1;
+    $("actions").innerHTML = asstIdx < 0 ? "" :
+      `<button class="primary" onclick="refill()">回填工具结果（${last.assistant.tool_calls.length} 条）</button>
+       <span style="font-size:12px;color:var(--dim)">目前数组断在 assistant 的 tool_calls 上，此刻发出去一定 400</span>`;
+    $("verdict").innerHTML = "";
+    render();
+  } catch (e) {
+    $("msgs").innerHTML = `<div class="err">失败：${esc(e.message)}</div>`;
+  }
+}
+
+function refill() {
+  revealed = last.messages.length;
+  $("actions").innerHTML = `<span class="tag ok">已回填</span>
+    <button onclick="turn()">重跑一次（id 会变）</button>`;
+  render();
+}
+
+function render() {
+  const shown = last.messages.slice(0, revealed);
+  $("msgs").innerHTML = shown.map(msgCard).join("");
+  const tok = last.tokens;
+  $("stat").innerHTML = `共 ${tok.messages} 条消息 · 估算 ${tok.total} token，其中 tool 消息占 ${tok.tool_tokens}
+    ${last.truncated && last.truncated.length ? `· <span class="tag warn">${last.truncated.length} 条被截断</span>` : ""}`;
+  if (revealed >= last.messages.length) {
+    $("verdict").innerHTML = last.problems.length
+      ? `<div class="banner bad">校验失败：${esc(last.problems.map(p => `[${p.index}] ${p.code}`).join("，"))}</div>`
+      : `<div class="banner ok">validate_messages() 通过：每条 tool 消息都能找到同 id 的 tool_calls</div>
+         <div class="note">最终回答：${esc(last.answer)}</div>`;
+  }
+}
+
+async function loadBroken() {
+  try {
+    const d = await j("broken");
+    $("broken").innerHTML = d.cases.map((c, i) => `<div class="msg">
+      <div class="hd"><b>${esc(c.case)}</b><span class="tag bad">${c.problems.length} 条问题</span></div>
+      <table><thead><tr><th>index</th><th>code</th><th>说明</th></tr></thead><tbody>
+        ${c.problems.map(p => `<tr><td class="mono">${p.index}</td><td class="mono">${esc(p.code)}</td><td>${esc(p.msg)}</td></tr>`).join("")}
+      </tbody></table></div>`).join("");
+  } catch (e) {
+    $("broken").innerHTML = `<div class="err">失败：${esc(e.message)}</div>`;
+  }
+}
+
+boot();
+</script>
+</body>
+</html>

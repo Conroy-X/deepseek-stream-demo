@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Unit 46 · MCP 协议解剖台</title>
+<style>
+  :root{--bg:#f7f7f5;--card:#fff;--line:#e3e2de;--text:#23231f;--dim:#7a7972;--accent:#185FA5;--ok:#0F6E56;--bad:#A32D2D;--warn:#854F0B}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font:14px/1.65 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;padding:20px}
+  .wrap{max-width:1120px;margin:0 auto}
+  h1{font-size:19px;font-weight:600}h2{font-size:13px;font-weight:600;color:var(--dim);margin-bottom:11px;letter-spacing:.02em}
+  .sub{color:var(--dim);font-size:13px;margin:4px 0 16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:15px;margin-bottom:14px}
+  button{padding:7px 13px;border:1px solid var(--line);border-radius:7px;background:#fff;font:inherit;font-size:13px;cursor:pointer;color:var(--text)}
+  button:hover{background:#f0efec}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{background:#0C447C}
+  button.mini{padding:3px 9px;font-size:12px}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .banner{padding:9px 13px;border-radius:8px;font-size:13px;margin-bottom:14px;border:1px solid var(--line);background:var(--card)}
+  .banner.ok{border-color:#9FE1CB;background:#E1F5EE;color:var(--ok)}
+  .banner.warn{border-color:#FAC775;background:#FAEEDA;color:var(--warn)}
+  .banner.bad{border-color:#F7C1C1;background:#FCEBEB;color:var(--bad)}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
+  @media (max-width:920px){.grid{grid-template-columns:1fr}}
+  .tag{display:inline-block;font-size:11.5px;padding:1px 7px;border-radius:20px;border:1px solid var(--line);color:var(--dim)}
+  .tag.ok{border-color:#9FE1CB;background:#E1F5EE;color:var(--ok)}
+  .tag.bad{border-color:#F7C1C1;background:#FCEBEB;color:var(--bad)}
+  .tag.warn{border-color:#FAC775;background:#FAEEDA;color:var(--warn)}
+  textarea{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:7px;font:12px/1.6 ui-monospace,Consolas,monospace;background:#fff;resize:vertical}
+  pre{background:#fbfbf9;border:1px solid var(--line);border-radius:8px;padding:10px;font:12px/1.6 ui-monospace,Consolas,monospace;overflow:auto;white-space:pre-wrap;word-break:break-word;max-height:280px}
+  .ph{color:var(--dim);font-size:13px}
+  .note{font-size:12.5px;color:var(--warn);background:#FAEEDA;border:1px solid #FAC775;border-radius:8px;padding:8px 12px;margin-top:10px}
+  .note.ok{color:var(--ok);background:#E1F5EE;border-color:#9FE1CB}
+  .note.bad{color:var(--bad);background:#FCEBEB;border-color:#F7C1C1}
+  .steps{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px}
+  .step{flex:1;min-width:170px;border:1px solid var(--line);border-radius:9px;padding:9px 11px;font-size:12.5px;background:#fff}
+  .step.done{border-color:#9FE1CB;background:#F3FBF7}
+  .step .n{font-size:11px;color:var(--dim)}
+  .step b{display:block;margin:2px 0 3px;font-size:12.5px}
+  .step .st{font-size:11.5px}
+  .step.done .st{color:var(--ok)}
+  .kv{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+  .logline{font:11.5px/1.6 ui-monospace,Consolas,monospace;color:var(--dim);border-bottom:1px dashed var(--line);padding:4px 0;word-break:break-all}
+  .cap{display:grid;grid-template-columns:110px 1fr;gap:6px 10px;font-size:12.5px;align-items:center}
+  .err{border-left:3px solid var(--bad);padding-left:9px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Unit 46 · MCP 协议解剖台</h1>
+  <div class="sub">MCP 就是一层 JSON-RPC 2.0 加一次握手；下面这些报文就是它的全部</div>
+
+  <div class="banner" id="health">探测后端…</div>
+
+  <div class="card">
+    <h2>① 生命周期（四步，缺一步就跑不通）</h2>
+    <div class="steps" id="steps"></div>
+    <div class="row" style="margin-top:10px">
+      <button class="primary" onclick="runFlow()">跑一遍完整流程</button>
+      <button onclick="reset()">重置（回到未握手）</button>
+      <span class="ph" id="statehint"></span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>② 选一帧发过去</h2>
+    <div class="row" id="examples"><span class="ph">加载中…</span></div>
+    <div class="grid" style="margin-top:12px">
+      <div>
+        <h2 style="margin-bottom:6px">请求（可改）</h2>
+        <textarea id="req" rows="10" spellcheck="false"></textarea>
+        <div class="row" style="margin-top:8px">
+          <button class="primary" onclick="send()">发送</button>
+          <span class="ph" id="reqhint"></span>
+        </div>
+      </div>
+      <div>
+        <h2 style="margin-bottom:6px">响应</h2>
+        <pre id="resp">还没发。</pre>
+        <div id="resphint"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>③ 能力表（握手时谈好的）</h2>
+      <div class="cap" id="caps"><span class="ph">—</span></div>
+      <div class="note">没声明的能力，对应方法就**不存在**。点「⑦ 未声明的方法」能看到它返回 -32601 ——
+        不是「拒绝」，是「没这个功能」。</div>
+    </div>
+    <div class="card">
+      <h2>④ 服务器收到的帧</h2>
+      <div class="row" style="margin-bottom:8px">
+        <button class="mini" onclick="loadLog()">刷新</button>
+        <span class="ph" id="loghint"></span>
+      </div>
+      <div id="log"><span class="ph">—</span></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+let items = {}, state = null;
+
+async function jfetch(path, opts) {
+  const r = await fetch(path, opts);
+  const d = await r.json().catch(() => ({}));
+  return { ok: r.ok, status: r.status, data: d };
+}
+
+async function loadHealth() {
+  const { data: h } = await jfetch("health");
+  state = h;
+  $("health").className = "banner " + (h.initialized ? "ok" : "warn");
+  $("health").textContent = `${h.server} v${h.version} · 协议 ${h.protocol_version}（支持 ${h.supported_versions.join(" / ")}） · `
+    + `已握手：${h.initialized ? "是" : "否"} · 工具 ${h.tools.length} 个 · 已调用 ${h.calls} 次`;
+  $("statehint").textContent = h.initialized ? "现在可以调工具了" : "还没握手：直接调工具会拿到 -32002";
+  drawSteps(h);
+  drawCaps(h);
+}
+
+function drawSteps(h) {
+  const done = [true, h.initialized, h.initialized, h.calls > 0];
+  const names = ["initialize", "notifications/initialized", "tools/list", "tools/call"];
+  const desc = ["谈版本与能力，拿回 serverInfo",
+                "通知（无 id），服务器不回",
+                "拿到工具清单与 inputSchema",
+                "真正干活：result.content[0].text"];
+  $("steps").innerHTML = names.map((n, i) => `
+    <div class="step ${done[i] ? "done" : ""}">
+      <div class="n">STEP ${i + 1}</div>
+      <b>${esc(n)}</b>
+      <div class="st">${done[i] ? "✓ 已完成" : "· 待执行"}</div>
+      <div class="ph" style="font-size:11.5px;margin-top:3px">${esc(desc[i])}</div>
+    </div>`).join("");
+}
+
+function drawCaps(h) {
+  const names = {tools: "tools 工具", resources: "resources 资源", prompts: "prompts 提示词"};
+  $("caps").innerHTML = Object.entries(names).map(([k, label]) => {
+    const has = !!h.capabilities[k];
+    const detail = has ? Object.entries(h.capabilities[k]).map(([a, b]) => `${a}=${b}`).join(" · ") : "未声明 → 相关方法返回 -32601";
+    return `<div>${has ? '<span class="tag ok">' : '<span class="tag">'}${esc(label)}</span></div>
+            <div class="ph">${esc(detail)}</div>`;
+  }).join("");
+}
+
+async function loadExamples() {
+  const { data: d } = await jfetch("api/examples");
+  items = d.items;
+  $("examples").innerHTML = d.order.map(k =>
+    `<button class="mini" data-k="${k}" onclick="pick('${k}')">${esc(items[k].label)}</button>`).join("");
+}
+
+function pick(k) {
+  document.querySelectorAll("#examples button").forEach(b => b.classList.toggle("primary", b.dataset.k === k));
+  $("req").value = JSON.stringify(items[k].frame, null, 2);
+  $("reqhint").textContent = items[k].note;
+  $("resp").textContent = "还没发。";
+  $("resphint").innerHTML = "";
+}
+
+async function send() {
+  let frame;
+  try {
+    frame = JSON.parse($("req").value);
+  } catch (e) {
+    $("resp").textContent = "JSON 解析失败：" + e.message;
+    return;
+  }
+  const { data: d } = await jfetch("rpc", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ frame }),
+  });
+  $("resp").textContent = d.response === null ? "null（通知不回响应）" : JSON.stringify(d.response, null, 2);
+  renderHint(d.response, d.kind);
+  await loadHealth();
+  await loadLog();
+}
+
+function renderHint(resp, kind) {
+  if (kind === "invalid") {
+    $("resphint").innerHTML = `<div class="note bad err">帧本身非法 → -32600。注意这是**协议层**的错，
+      不是业务错：连方法都还没看到。</div>`;
+    return;
+  }
+  if (resp === null) {
+    $("resphint").innerHTML = `<div class="note ok">通知没有 id，所以没有响应。客户端发完就走，不等回执。</div>`;
+    return;
+  }
+  if (resp.error) {
+    const names = {"-32600": "Invalid Request 帧格式非法", "-32601": "Method not found 没这个能力",
+      "-32602": "Invalid params 参数不对", "-32603": "Internal error 服务器内部错",
+      "-32002": "Server not initialized 还没握手"};
+    const n = names[String(resp.error.code)] || "";
+    const extra = resp.error.data ? `<pre style="margin-top:8px">${esc(JSON.stringify(resp.error.data, null, 2))}</pre>` : "";
+    $("resphint").innerHTML = `<div class="note bad err"><b>${resp.error.code}</b> ${esc(n)}<br>${esc(resp.error.message)}${extra}</div>`;
+    return;
+  }
+  const r = resp.result || {};
+  let extra = "";
+  if (r.isError === true) {
+    extra = `<div class="note">注意：这是 <b>result 里的 isError</b>，不是 error 帧。工具坏了不等于协议坏了 ——
+      这样模型才看得到失败原因。</div>`;
+  } else if (r.content) {
+    extra = `<div class="note ok">结果在 <code>content[0].text</code>，是字符串。和 OpenAI 的 tool 消息一个道理。</div>`;
+  } else if (r.capabilities) {
+    extra = `<div class="note ok">握手成功。接下来客户端只会调用这里声明过的能力。</div>`;
+  }
+  $("resphint").innerHTML = extra;
+}
+
+async function runFlow() {
+  await jfetch("reset", { method: "POST" });
+  const { data: d } = await jfetch("api/flow");
+  $("resp").textContent = d.steps.map(s =>
+    `# ${s.label}\n→ ${JSON.stringify(s.request)}\n← ${s.response === null ? "null" : JSON.stringify(s.response)}`
+  ).join("\n\n");
+  $("resphint").innerHTML = `<div class="note ok">四步跑完：negotiated=${esc(d.negotiated_version)}，工具调用 ${d.calls} 次。</div>`;
+  await loadHealth();
+  await loadLog();
+}
+
+async function reset() {
+  await jfetch("reset", { method: "POST" });
+  $("resp").textContent = "已重置：现在是「连上了但没握手」的状态，试试直接发 tools/list。";
+  $("resphint").innerHTML = "";
+  await loadHealth();
+  await loadLog();
+}
+
+async function loadLog() {
+  const { data: d } = await jfetch("api/log");
+  $("loghint").textContent = `共 ${d.count} 条`;
+  $("log").innerHTML = d.items.length
+    ? d.items.slice().reverse().slice(0, 12).map(x => `<div class="logline">${esc(JSON.stringify(x))}</div>`).join("")
+    : '<span class="ph">还没有收到任何帧。</span>';
+}
+
+(async () => {
+  await loadExamples();
+  await loadHealth();
+  await loadLog();
+  pick("initialize");
+})();
+</script>
+</body>
+</html>

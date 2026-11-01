@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+data/*.db
+# WAL 模式会并排生成 -wal / -shm，只写 data/*.db 是漏的（这两个文件能上百 KB）
+data/*.db-wal
+data/*.db-shm
+data/*.sqlite3

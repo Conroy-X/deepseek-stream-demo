@@ -1,0 +1,13 @@
+[project]
+name = "unit34-agent-loop"
+version = "0.1.0"
+description = "Unit 34：Agent Loop，手写 while 循环 / 终止条件 / max_steps / 可回放 trace / 步进执行"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi[standard]>=0.115",
+    "httpx>=0.27",
+    "python-dotenv>=1.0",
+]
+
+[tool.uv]
+package = false

@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Unit 41 · 搜索工具 实验台</title>
+<style>
+  :root{--bg:#f7f7f5;--card:#fff;--line:#e3e2de;--text:#23231f;--dim:#7a7972;--accent:#185FA5;--ok:#0F6E56;--bad:#A32D2D;--warn:#854F0B}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font:14px/1.65 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;padding:20px}
+  .wrap{max-width:980px;margin:0 auto}
+  h1{font-size:19px;font-weight:600}
+  h2{font-size:13px;font-weight:600;color:var(--dim);margin-bottom:11px}
+  .sub{color:var(--dim);font-size:13px;margin:4px 0 16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:15px;margin-bottom:14px}
+  button{padding:7px 13px;border:1px solid var(--line);border-radius:7px;background:#fff;font:inherit;font-size:13px;cursor:pointer;color:var(--text)}
+  button:hover{background:#f0efec}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  input{padding:8px 11px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:13.5px;background:#fff;color:var(--text)}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .banner{padding:9px 13px;border-radius:8px;font-size:13px;margin-bottom:14px;border:1px solid var(--line);background:var(--card)}
+  .banner.ok{border-color:#9FE1CB;background:#E1F5EE;color:var(--ok)}
+  .banner.bad{border-color:#F5C4C4;background:#FCEBEB;color:var(--bad)}
+  .item{border:1px solid var(--line);border-radius:9px;padding:11px 13px;margin-bottom:8px;background:#fbfbf9}
+  .item .t{font-size:14px;font-weight:500}
+  .item .u{font-size:12px;color:var(--accent);margin-top:3px;word-break:break-all}
+  .item .s{font-size:12.5px;color:var(--dim);margin-top:5px}
+  .tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:20px;border:1px solid var(--line);color:var(--dim)}
+  .tag.ok{background:#E1F5EE;border-color:#9FE1CB;color:var(--ok)}
+  pre{font:12px/1.7 ui-monospace,"Cascadia Code",monospace;white-space:pre-wrap;word-break:break-word;background:#fff;border:1px solid var(--line);border-radius:7px;padding:8px}
+  .err{color:var(--bad);font-size:12.5px}
+  .empty{color:var(--warn);background:#FAEEDA;border:1px solid #FAC775;border-radius:8px;padding:8px 12px;font-size:13px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Unit 41 · 搜索工具 实验台</h1>
+  <div class="sub">5 条离线 fixture · 不联网、不要 API key · 重点看 schema 怎么写</div>
+
+  <div class="banner" id="health">探测后端…</div>
+
+  <div class="card">
+    <div class="row">
+      <input id="q" style="flex:1" value="MCP 协议" placeholder="关键词，如：MCP 协议 / RAG / LangGraph">
+      <input id="mx" type="number" min="0" max="10" value="5" style="width:80px" title="max_results">
+      <button class="primary" onclick="doSearch()">搜索</button>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <button onclick="quick('MCP 协议')">MCP（2 条）</button>
+      <button onclick="quick('RAG')">RAG（2 条）</button>
+      <button onclick="quick('LangGraph')">LangGraph（1 条）</button>
+      <button onclick="quick('量子计算')">查不到</button>
+      <span id="stat" style="font-size:12.5px;color:var(--dim)"></span>
+    </div>
+    <div id="results" style="margin-top:12px"></div>
+  </div>
+
+  <div class="card">
+    <h2>OpenAI 工具声明（/tools 返回的内容）</h2>
+    <pre id="tool"></pre>
+  </div>
+
+  <div class="card">
+    <h2>fixture 全表（/fixtures —— 工具背后到底有什么）</h2>
+    <div id="fx"></div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+async function j(path, opt) {
+  const r = await fetch(path, opt);
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.detail || ("HTTP " + r.status));
+  return d;
+}
+const post = (p, body) => j(p, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+
+async function boot() {
+  try {
+    const h = await j("health");
+    $("health").className = "banner ok";
+    $("health").textContent = `后端就绪 · fixture ${h.fixture_count} 条 · 主题：${h.topics.join(" / ")} · 默认 max_results=${h.default_max_results}`;
+    const tl = await j("tools");
+    $("tool").textContent = JSON.stringify(tl, null, 2);
+    const fx = await j("fixtures");
+    $("fx").innerHTML = fx.items.map(x =>
+      `<div class="item"><div class="t">${esc(x.title)}</div>
+       <div class="u">${esc(x.url)}</div>
+       <div style="margin-top:5px"><span class="tag ok">${esc(x.topic)}</span> <span class="tag">${esc(x.id)}</span></div></div>`
+    ).join("");
+    doSearch();
+  } catch (e) {
+    $("health").className = "banner bad";
+    $("health").textContent = "后端没响应：" + e.message;
+  }
+}
+
+function quick(t) { $("q").value = t; doSearch(); }
+
+async function doSearch() {
+  const q = $("q").value.trim();
+  const mx = Number($("mx").value) || 0;
+  if (!q) { $("results").innerHTML = `<div class="empty">query 不能为空</div>`; return; }
+  try {
+    const d = await post("search", { query: q, max_results: mx });
+    $("stat").textContent = `命中 ${d.count} / max_results=${d.max_results}`;
+    if (d.count === 0) {
+      $("results").innerHTML = `<div class="empty">空列表（不是报错）—— 模型应该换词或者承认查不到</div>`;
+    } else {
+      $("results").innerHTML = d.results.map((x, i) =>
+        `<div class="item"><div class="t">${i + 1}. ${esc(x.title)}</div>
+         <div class="u">${esc(x.url)}</div>
+         <div class="s">${esc(x.snippet)}</div></div>`
+      ).join("");
+    }
+  } catch (e) {
+    $("results").innerHTML = `<div class="err">失败：${esc(e.message)}</div>`;
+  }
+}
+
+boot();
+</script>
+</body>
+</html>

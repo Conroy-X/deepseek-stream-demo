@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Unit 36 · Agent 错误处理实验台</title>
+<style>
+  :root{--bg:#f7f7f5;--card:#fff;--line:#e3e2de;--text:#23231f;--dim:#7a7972;--accent:#185FA5;--ok:#0F6E56;--bad:#A32D2D;--warn:#854F0B}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font:14px/1.65 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;padding:20px}
+  .wrap{max-width:1000px;margin:0 auto}
+  h1{font-size:19px;font-weight:600}h2{font-size:13px;font-weight:600;color:var(--dim);margin-bottom:11px}
+  .sub{color:var(--dim);font-size:13px;margin:4px 0 16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:15px;margin-bottom:14px}
+  button{padding:7px 13px;border:1px solid var(--line);border-radius:7px;background:#fff;font:inherit;font-size:13px;cursor:pointer;color:var(--text)}
+  button:hover{background:#f0efec}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.danger{border-color:#F5C4C4;color:var(--bad)}
+  input{padding:8px 11px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:13px;background:#fff;color:var(--text)}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .banner{padding:9px 13px;border-radius:8px;font-size:13px;margin-bottom:14px;border:1px solid var(--line);background:var(--card)}
+  .banner.ok{border-color:#9FE1CB;background:#E1F5EE;color:var(--ok)}
+  .banner.bad{border-color:#F5C4C4;background:#FCEBEB;color:var(--bad)}
+  .step{border:1px solid var(--line);border-left:3px solid var(--line);border-radius:9px;padding:9px 12px;margin-bottom:7px;background:#fbfbf9}
+  .step.model{border-left-color:#9FE1CB}.step.tool{border-left-color:var(--accent)}.step.breaker{border-left-color:var(--bad);background:#FCEBEB}
+  .hd{font-size:11.5px;color:var(--dim);display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:4px}
+  pre{font:11.5px/1.65 ui-monospace,"Cascadia Code",monospace;white-space:pre-wrap;word-break:break-word;background:#fff;border:1px solid var(--line);border-radius:7px;padding:8px;max-height:220px;overflow:auto;margin-top:5px}
+  .tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:20px;border:1px solid var(--line);color:var(--dim)}
+  .tag.ok{background:#E1F5EE;border-color:#9FE1CB;color:var(--ok)}
+  .tag.bad{background:#FCEBEB;border-color:#F5C4C4;color:var(--bad)}
+  .tag.warn{background:#FAEEDA;border-color:#FAC775;color:var(--warn)}
+  .err{color:var(--bad);font-size:12.5px}
+  .note{font-size:12.5px;color:var(--warn);background:#FAEEDA;border:1px solid #FAC775;border-radius:8px;padding:8px 12px;margin-top:10px}
+  .ans{background:#E1F5EE;border:1px solid #9FE1CB;border-radius:9px;padding:10px 13px;font-size:14px;color:#0B4F3D;margin-top:10px}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th,td{text-align:left;padding:5px 8px;border-bottom:1px solid var(--line)}
+  th{color:var(--dim);font-weight:600}
+  td.mono{font-family:ui-monospace,monospace}
+  .kpi{display:flex;gap:18px;flex-wrap:wrap;font-size:12.5px;color:var(--dim);margin-top:8px}
+  .kpi b{color:var(--text);font-family:ui-monospace,monospace}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Unit 36 · Agent 错误处理实验台</h1>
+  <div class="sub">工具一定会坏：抛异常 / 超时 / 死循环 / 重复调用 —— 循环都得活着</div>
+
+  <div class="banner" id="health">探测后端…</div>
+
+  <div class="card">
+    <h2>故障注入</h2>
+    <div class="row">
+      <button onclick="go('none')">正常</button>
+      <button class="danger" onclick="go('raise')">抛异常</button>
+      <button class="danger" onclick="go('timeout')">超时 3 秒（预算 0.5s）</button>
+      <button class="danger" onclick="go('loop')">强制死循环</button>
+      <button class="danger" onclick="go('replay')">重放同一调用</button>
+      <span style="font-size:12px;color:var(--dim)">预算</span>
+      <input id="budget" value="0.5" style="width:70px">
+    </div>
+    <div class="kpi" id="kpi"></div>
+    <div id="out" style="margin-top:12px"></div>
+  </div>
+
+  <div class="card">
+    <h2>四道防线（自检里逐条验过）</h2>
+    <table><thead><tr><th>防线</th><th>机制</th><th>实测</th></tr></thead><tbody>
+      <tr><td>异常</td><td><code>try/except</code> → <code>kind=exception</code></td><td>0.1 ms 返回，循环继续</td></tr>
+      <tr><td>超时</td><td><code>asyncio.wait_for</code></td><td>预算 0.5s，墙钟 500.8 ms（工具要睡 3s）</td></tr>
+      <tr><td>死循环</td><td><code>LoopBreaker</code>，同参第 3 次熔断</td><td>第 3 步停，工具只执行 2 次</td></tr>
+      <tr><td>重复调用</td><td><code>IdempotencyStore</code> 按 tool_call_id 去重</td><td>重放 1 次，副作用仍只 1 次</td></tr>
+    </tbody></table>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+async function j(path, opt) {
+  const r = await fetch(path, opt);
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.detail || ("HTTP " + r.status));
+  return d;
+}
+const post = (p, body) => j(p, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+
+async function boot() {
+  try {
+    const h = await j("health");
+    $("health").className = "banner ok";
+    $("health").textContent = `后端就绪 · 工具：${h.tools.join(" / ")} · 默认预算 ${h.budget}s`;
+    go("none");
+  } catch (e) {
+    $("health").className = "banner bad";
+    $("health").textContent = "后端没响应：" + e.message;
+  }
+}
+
+function kindTag(kind) {
+  const map = { ok: "ok", exception: "bad", timeout: "warn", blocked: "bad", unknown_tool: "bad", bad_arguments: "warn" };
+  return `<span class="tag ${map[kind] || ""}">${esc(kind || "?")}</span>`;
+}
+
+async function go(kind) {
+  const budget = Number($("budget").value) || 0.5;
+  $("out").innerHTML = `<span style="color:var(--dim);font-size:13px">跑 ${esc(kind)} …</span>`;
+  try {
+    if (kind === "replay") return renderReplay(await post("fault", { kind: "replay" }));
+    const d = await post("fault", { kind, budget });
+
+    $("kpi").innerHTML = `<span>停止原因 <b>${esc(d.stopped)}</b></span><span>步数 <b>${d.steps}</b></span>
+      <span>墙钟 <b>${d.wall_ms} ms</b></span><span>工具真正执行 <b>${d.tool_calls_executed}</b> 次</span>
+      <span>熔断事件 <b>${(d.breaker_events || []).length}</b></span>`;
+
+    const trace = (d.trace || []).map(t => {
+      if (t.type === "breaker") {
+        return `<div class="step breaker"><div class="hd"><span class="tag bad">breaker</span> 第 ${t.step} 步</div>
+          <div style="font-size:13px;color:var(--bad)">${esc(t.reason)}</div></div>`;
+      }
+      if (t.type === "tool") {
+        return `<div class="step tool"><div class="hd"><span class="tag">tool</span> 第 ${t.step} 步
+          ${kindTag(t.kind)} <b>${esc(t.tool)}</b> <span>${t.elapsed_ms} ms</span></div>
+          <pre>${esc(t.content)}</pre></div>`;
+      }
+      return `<div class="step model"><div class="hd"><span class="tag">model</span> 第 ${t.step} 步
+        ${t.decision ? `<span class="tag ${t.decision === "answer" ? "ok" : ""}">${esc(t.decision)}</span>` : ""}
+        ${t.calls ? `<span>要求 ${t.calls} 个工具</span>` : ""}</div>
+        ${t.content ? `<div style="font-size:13px">${esc(t.content)}</div>` : ""}</div>`;
+    }).join("");
+
+    $("out").innerHTML = `${trace}
+      <div class="ans"><b>回答：</b>${esc(d.answer)}</div>
+      ${d.breaker_events && d.breaker_events.length
+        ? `<div class="note">熔断原因：${esc(d.breaker_events[0].reason)}　
+           注意：熔断检查在**执行前**，所以第三次调用没有被真的发出去。</div>`
+        : `<div class="note">${kind === "none" ? "正常路径：行为和 Unit 34 没有任何区别。" :
+           kind === "raise" ? "异常被翻译成 tool 消息，模型据此说人话，而不是抛 500。" :
+           kind === "timeout" ? "预算 0.5s 到了就放弃，不会等工具睡完 3 秒。" : ""}</div>`}`;
+  } catch (e) {
+    $("out").innerHTML = `<div class="err">失败：${esc(e.message)}</div>`;
+  }
+}
+
+function renderReplay(d) {
+  $("kpi").innerHTML = `<span>同一 key 副作用 <b>${d.effect_count_after_replay}</b> 次</span>
+    <span>换 key 后 <b>${d.effect_count}</b> 次</span><span>重放命中 <b>${d.replays}</b> 次</span>`;
+  $("out").innerHTML = `<table><thead><tr><th>调用</th><th>key</th><th>replayed</th><th>effect_no</th></tr></thead><tbody>
+    <tr><td>第一次</td><td class="mono">${esc(d.key)}</td><td class="mono">${d.first.replayed}</td><td class="mono">${d.first.result.effect_no}</td></tr>
+    <tr><td>第二次（重放）</td><td class="mono">${esc(d.key)}</td><td class="mono">${d.second.replayed}</td><td class="mono">${d.second.result.effect_no}</td></tr>
+    <tr><td>换一个 key</td><td class="mono">call_fixed_002</td><td class="mono">${d.other_key.replayed}</td><td class="mono">${d.other_key.result.effect_no}</td></tr>
+    </tbody></table>
+    <pre>${esc(JSON.stringify(d.effects, null, 2))}</pre>
+    <div class="note">第二次的 effect_no 和第一次一样 —— 退款没有真的退第二次。这就是幂等键的作用：
+      网络超时后客户端重试，带上同一个 tool_call_id，服务端认得出它是同一件事。</div>`;
+}
+
+boot();
+</script>
+</body>
+</html>

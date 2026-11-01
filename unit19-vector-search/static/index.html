@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Unit 19 · 向量检索实验台</title>
+<style>
+  :root{--bg:#f7f7f5;--card:#fff;--line:#e3e2de;--text:#23231f;--dim:#7a7972;--accent:#185FA5;--ok:#0F6E56;--bad:#A32D2D;--warn:#854F0B}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font:14px/1.65 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;padding:20px}
+  .wrap{max-width:1060px;margin:0 auto}
+  h1{font-size:19px;font-weight:600}h2{font-size:13px;font-weight:600;color:var(--dim);margin-bottom:11px;letter-spacing:.02em}
+  .sub{color:var(--dim);font-size:13px;margin:4px 0 16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:15px;margin-bottom:14px}
+  button{padding:7px 13px;border:1px solid var(--line);border-radius:7px;background:#fff;font:inherit;font-size:13px;cursor:pointer;color:var(--text)}
+  button:hover{background:#f0efec}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{background:#0C447C}
+  button.chip.on{background:#E6F1FB;border-color:var(--accent);color:var(--accent)}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .ctrls{display:grid;grid-template-columns:2fr 1fr 2fr;gap:10px;margin-bottom:12px}
+  .ctrls label{font-size:12px;color:var(--dim);display:block;margin-bottom:4px}
+  .ctrls input,.ctrls select{width:100%;padding:6px 9px;border:1px solid var(--line);border-radius:7px;font:inherit;font-size:13px;background:#fff}
+  input[type=range]{width:100%;accent-color:var(--accent)}
+  .banner{padding:9px 13px;border-radius:8px;font-size:13px;margin-bottom:14px;border:1px solid var(--line);background:var(--card)}
+  .banner.ok{border-color:#9FE1CB;background:#E1F5EE;color:var(--ok)}
+  .banner.warn{border-color:#FAC775;background:#FAEEDA;color:var(--warn)}
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
+  .stat{border:1px solid var(--line);border-radius:9px;padding:10px 12px}
+  .stat b{display:block;font-size:20px;font-weight:600;letter-spacing:-.01em}
+  .stat span{font-size:12px;color:var(--dim)}
+  .hit{border:1px solid var(--line);border-radius:9px;padding:10px 12px;margin-bottom:8px;background:#fff}
+  .hit .hd{display:flex;gap:8px;align-items:center;font-size:11.5px;color:var(--dim);margin-bottom:6px}
+  .hit .tx{font-size:13px;line-height:1.7}
+  .hit .tx mark{background:#FFF3C4;font-style:normal}
+  .bar{height:4px;border-radius:3px;background:#eceae5;overflow:hidden;margin-top:8px}
+  .bar i{display:block;height:100%;background:var(--accent);border-radius:3px}
+  .tag{display:inline-block;font-size:11.5px;padding:1px 7px;border-radius:20px;border:1px solid var(--line);color:var(--dim)}
+  .tag.warn{color:var(--warn);border-color:#FAC775;background:#FAEEDA}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line)}
+  th{font-size:12px;color:var(--dim);font-weight:600}
+  td.num{text-align:right;font-variant-numeric:tabular-nums}
+  .err{color:var(--bad);font-size:12.5px}
+  .note{font-size:12.5px;color:var(--warn);background:#FAEEDA;border:1px solid #FAC775;border-radius:8px;padding:8px 12px;margin-top:10px}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:820px){.cols,.grid,.ctrls{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Unit 19 · 向量检索实验台</h1>
+  <div class="sub">同一句 query：改 top_k、改阈值、加过滤，看召回和排名怎么变</div>
+
+  <div class="banner" id="health">探测后端…</div>
+
+  <div class="card">
+    <h2>① 查询</h2>
+    <div class="ctrls">
+      <div><label>query</label><input id="q" value="退款多久到账"></div>
+      <div><label>top_k</label>
+        <select id="topk"><option>3</option><option selected>5</option><option>10</option></select>
+      </div>
+      <div><label>min_score 阈值 <b id="thrv">0.15</b></label>
+        <input id="thr" type="range" min="0" max="0.4" step="0.01" value="0.15">
+      </div>
+    </div>
+    <div class="row" style="margin-bottom:10px" id="cats"></div>
+    <div class="row">
+      <button class="primary" onclick="run()">检索</button>
+      <button onclick="runEval()">跑 12 题评测</button>
+    </div>
+  </div>
+
+  <div id="stats"></div>
+  <div class="cols">
+    <div id="out"></div>
+    <div id="metrics"></div>
+  </div>
+  <div id="eval"></div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let filter = {};
+
+async function getJSON(url, opt) {
+  const r = await fetch(url, opt);
+  const b = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(b.detail || ("HTTP " + r.status));
+  return b;
+}
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+async function loadHealth() {
+  const b = $("health");
+  try {
+    const h = await getJSON("health");
+    b.className = "banner ok";
+    b.textContent = `${h.chunks} 段 / ${h.chars} 字 / ${h.dim} 维 · 向量后端 ${h.embedder} · 可过滤字段 ${h.filterable.join(" / ")}`;
+    $("cats").innerHTML = `<span class="tag">category</span>` + ["", "hr", "refund", "ops", "sec", "release"]
+      .map(c => `<button class="chip${c === "" ? " on" : ""}" data-c="${c}" onclick="pickCat(this)">${c || "全部"}</button>`).join("");
+  } catch (e) {
+    b.className = "banner warn";
+    b.textContent = "后端没响应：" + e.message;
+  }
+}
+
+function pickCat(el) {
+  document.querySelectorAll(".chip").forEach(x => x.classList.remove("on"));
+  el.classList.add("on");
+  const c = el.dataset.c;
+  filter = c ? { category: c } : {};
+  run();
+}
+
+$("thr").oninput = () => { $("thrv").textContent = (+$("thr").value).toFixed(2); };
+
+async function run() {
+  $("out").innerHTML = '<div class="card"><span class="tag">检索中…</span></div>';
+  const body = {
+    query: $("q").value,
+    top_k: +$("topk").value,
+    min_score: +$("thr").value,
+    filters: filter
+  };
+  try {
+    const d = await getJSON("search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    $("stats").innerHTML = `<div class="card"><div class="row">
+      <span class="tag">返回 ${d.count} 条</span>
+      <span class="tag">扫描 ${d.scanned} 行</span>
+      <span class="tag">耗时 ${d.elapsed_ms} ms</span>
+      <span class="tag">阈值 ${d.min_score ?? "无"}</span>
+      <span class="tag">${Object.keys(d.filters).length ? "过滤 " + esc(JSON.stringify(d.filters)) : "无过滤"}</span>
+    </div></div>`;
+    $("out").innerHTML = d.hits.length ? d.hits.map(h => `
+      <div class="hit">
+        <div class="hd">
+          <b>${h.score.toFixed(3)}</b>
+          <span>${esc(h.id)}</span>
+          <span>${esc(h.source)} · 第 ${h.page} 页</span>
+          ${h.meta.category ? `<span class="tag">${esc(h.meta.category)}</span>` : ""}
+        </div>
+        <div class="tx">${mark(h.text, $("q").value)}</div>
+        <div class="bar"><i style="width:${Math.max(2, h.score * 100)}%"></i></div>
+      </div>`).join("")
+      : `<div class="card"><div class="err">阈值 ${d.min_score} 把结果全剪掉了 —— 这就是该拒答的信号</div></div>`;
+  } catch (e) {
+    $("out").innerHTML = `<div class="card"><div class="err">${esc(e.message)}</div></div>`;
+    $("stats").innerHTML = "";
+  }
+}
+
+function mark(text, query) {
+  // 把 query 里出现过的 2 字片段标黄，一眼看出「为什么这条被排上来」
+  const grams = new Set();
+  for (let i = 0; i < query.length - 1; i++) grams.add(query.slice(i, i + 2));
+  let out = esc(text);
+  [...grams].filter(g => g.trim().length === 2).forEach(g => {
+    out = out.split(esc(g)).join(`<mark>${esc(g)}</mark>`);
+  });
+  return out;
+}
+
+async function runEval() {
+  $("metrics").innerHTML = '<div class="card"><span class="tag">评测中…</span></div>';
+  try {
+    const d = await getJSON("eval?top_k=" + $("topk").value + "&min_score=" + $("thr").value);
+    const best = Math.max(...d.sweep.map(s => s.recall));
+    $("metrics").innerHTML = `
+      <div class="card">
+        <h2>② 12 题评测（top_k=${d.top_k}）</h2>
+        <div class="grid" style="grid-template-columns:repeat(3,1fr)">
+          <div class="stat"><b>${d.recall_at_k.toFixed(2)}</b><span>Recall@${d.top_k}</span></div>
+          <div class="stat"><b>${d.mrr.toFixed(3)}</b><span>MRR</span></div>
+          <div class="stat"><b>${d.hits}/${d.questions}</b><span>命中题数</span></div>
+        </div>
+        <table><thead><tr><th>K</th><th class="num">Recall@K</th><th class="num">MRR</th></tr></thead>
+        <tbody>${d.sweep.map(s => `<tr>
+          <td>${s.k}</td>
+          <td class="num" style="${s.recall === best ? "color:var(--ok)" : ""}">${s.recall.toFixed(2)}</td>
+          <td class="num">${s.mrr.toFixed(3)}</td></tr>`).join("")}</tbody></table>
+        <div class="note">K 变大 Recall 只会升、MRR 不一定 —— 前者说「能不能找到」，后者说「排得靠不靠前」。</div>
+      </div>`;
+    $("eval").innerHTML = `
+      <div class="card">
+        <h2>③ 阈值扫描：加阈值换来了什么</h2>
+        <table><thead><tr><th>min_score</th><th class="num">Recall@${d.top_k}</th><th class="num">MRR</th><th class="num">平均返回</th><th class="num">完全空</th></tr></thead>
+        <tbody>${d.thresholds.map(t => `<tr>
+          <td>${t.min_score ?? "无"}</td>
+          <td class="num">${t.recall.toFixed(2)}</td>
+          <td class="num">${t.mrr.toFixed(3)}</td>
+          <td class="num">${t.avg_returned}</td>
+          <td class="num ${t.empty ? "err" : ""}">${t.empty}</td></tr>`).join("")}</tbody></table>
+        <h2 style="margin-top:14px">逐题明细</h2>
+        <table><thead><tr><th>问题</th><th class="num">首个命中排名</th><th class="num">RR</th></tr></thead>
+        <tbody>${d.details.map(x => `<tr>
+          <td>${esc(x.q)}</td>
+          <td class="num">${x.rank ?? "未命中"}</td>
+          <td class="num">${x.rr.toFixed(3)}</td></tr>`).join("")}</tbody></table>
+      </div>`;
+  } catch (e) {
+    $("metrics").innerHTML = `<div class="card"><div class="err">${esc(e.message)}</div></div>`;
+  }
+}
+
+loadHealth();
+run();
+runEval();
+</script>
+</body>
+</html>

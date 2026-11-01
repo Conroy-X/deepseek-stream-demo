@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Unit 56 · Schema 与方言实验台</title>
+<style>
+  :root{--bg:#f7f7f5;--card:#fff;--line:#e3e2de;--text:#23231f;--dim:#7a7972;--accent:#185FA5;--ok:#0F6E56;--bad:#A32D2D;--warn:#854F0B}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font:14px/1.65 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;padding:20px}
+  .wrap{max-width:1120px;margin:0 auto}
+  h1{font-size:19px;font-weight:600}h2{font-size:13px;font-weight:600;color:var(--dim);margin-bottom:11px;letter-spacing:.02em}
+  .sub{color:var(--dim);font-size:13px;margin:4px 0 16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:15px;margin-bottom:14px}
+  button{padding:7px 13px;border:1px solid var(--line);border-radius:7px;background:#fff;font:inherit;font-size:13px;cursor:pointer;color:var(--text)}
+  button:hover{background:#f0efec}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{background:#0C447C}
+  button.mini{padding:3px 9px;font-size:12px}
+  input[type=text],input[type=number]{padding:7px 10px;border:1px solid var(--line);border-radius:7px;font:inherit;font-size:13px;background:#fff}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .banner{padding:9px 13px;border-radius:8px;font-size:13px;margin-bottom:14px;border:1px solid var(--line);background:var(--card)}
+  .banner.ok{border-color:#9FE1CB;background:#E1F5EE;color:var(--ok)}
+  .banner.warn{border-color:#FAC775;background:#FAEEDA;color:var(--warn)}
+  .grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;align-items:start}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
+  @media (max-width:960px){.grid,.grid2{grid-template-columns:1fr}}
+  .tag{display:inline-block;font-size:11.5px;padding:1px 7px;border-radius:20px;border:1px solid var(--line);color:var(--dim)}
+  .tag.ok{border-color:#9FE1CB;background:#E1F5EE;color:var(--ok)}
+  .tag.bad{border-color:#F7C1C1;background:#FCEBEB;color:var(--bad)}
+  .tag.warn{border-color:#FAC775;background:#FAEEDA;color:var(--warn)}
+  pre{background:#fbfbf9;border:1px solid var(--line);border-radius:8px;padding:10px;font:12px/1.6 ui-monospace,Consolas,monospace;overflow:auto;white-space:pre-wrap;word-break:break-word;max-height:300px}
+  .ph{color:var(--dim);font-size:13px}
+  .note{font-size:12.5px;color:var(--warn);background:#FAEEDA;border:1px solid #FAC775;border-radius:8px;padding:8px 12px;margin-top:10px}
+  .note.ok{color:var(--ok);background:#E1F5EE;border-color:#9FE1CB}
+  .note.bad{color:var(--bad);background:#FCEBEB;border-color:#F7C1C1}
+  .bar{height:7px;border-radius:4px;background:var(--accent);margin-top:6px}
+  .var h3{font-size:13px;margin-bottom:4px}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th,td{border-bottom:1px solid var(--line);padding:5px 7px;text-align:left}
+  th{color:var(--dim);font-weight:600;font-size:11.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Unit 56 · Schema 与方言实验台</h1>
+  <div class="sub">同一份库、同一个问题，schema 换个写法，模型写出来的 SQL 就换一个准头</div>
+
+  <div class="banner" id="health">探测后端…</div>
+
+  <div class="card">
+    <h2>① 三种 schema 表示（字符数是硬指标）</h2>
+    <div class="row" style="margin-bottom:10px">
+      <input type="text" id="q" value="上月华东区销售额前 3 的客户是谁？" style="flex:1;min-width:280px">
+      <button class="primary" onclick="loadCompare()">对比</button>
+    </div>
+    <div class="grid" id="variants"><span class="ph">加载中…</span></div>
+    <div id="synhint"></div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h2>② 方言转换：取前 N 行</h2>
+      <div class="row">
+        <input type="text" id="d-sql" value="SELECT name FROM products" style="flex:1;min-width:220px">
+        <input type="number" id="d-n" value="10" style="width:70px">
+        <button class="primary" onclick="loadDialect()">转换</button>
+      </div>
+      <div id="dialect" style="margin-top:10px"><span class="ph">—</span></div>
+    </div>
+    <div class="card">
+      <h2>③ 列名歧义：哪些列撞名</h2>
+      <div id="ambig"><span class="ph">加载中…</span></div>
+      <div class="note">id 在 4 张表里都有。不写表别名限定，SQLite 直接报
+        <code>ambiguous column name: id</code> —— 这不是「查得慢」，是查不了。</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>④ 端到端提问（可选 schema 表示）</h2>
+    <div class="row">
+      <input type="text" id="question" value="上月华东区销售额前 3 的客户是谁？" style="flex:1;min-width:280px">
+      <select id="mode" style="padding:7px 10px;border:1px solid var(--line);border-radius:7px;font:inherit">
+        <option value="relevant">按问题预筛</option>
+        <option value="compact">精简</option>
+        <option value="full">全量 DDL</option>
+      </select>
+      <button class="primary" onclick="ask()">生成并执行</button>
+    </div>
+    <div class="grid2" style="margin-top:12px">
+      <div><h2 style="margin-bottom:6px">生成的 SQL</h2><pre id="sql">—</pre></div>
+      <div><h2 style="margin-bottom:6px">答案</h2><pre id="answer">—</pre><div class="ph" id="metas"></div></div>
+    </div>
+    <div id="rows"></div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s === null || s === undefined ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+async function jfetch(path, opts) {
+  const r = await fetch(path, opts);
+  const d = await r.json().catch(() => ({}));
+  return { ok: r.ok, data: d };
+}
+
+async function loadHealth() {
+  const { data: h } = await jfetch("health");
+  $("health").className = "banner ok";
+  $("health").textContent = `${h.server} · 协议 ${h.protocol} · 方言：${h.dialects.join(" / ")}`;
+}
+
+async function loadCompare() {
+  const q = encodeURIComponent($("q").value.trim());
+  const { data: d } = await jfetch(`api/schema/compare?q=${q}`);
+  const max = Math.max(...d.variants.map(v => v.chars));
+  $("variants").innerHTML = d.variants.map(v => `
+    <div class="var card" style="margin:0">
+      <h3>${esc(v.mode)} <span class="tag">${esc(v.chars)} 字符</span></h3>
+      <div class="ph" style="font-size:12px">${esc(v.lines)} 行 · 粗估 ${esc(v.est_tokens)} token</div>
+      <div class="bar" style="width:${Math.round(v.chars / max * 100)}%"></div>
+      <pre style="margin-top:8px;max-height:220px">${esc(v.text)}</pre>
+    </div>`).join("");
+  $("synhint").innerHTML = `<div class="note">全量 / 预筛 = ${esc(d.ratio_full_to_relevant)} 倍。
+    换成 ${esc(d.synthetic.tables)} 张表的真实库：全量 ${esc(d.synthetic.all_chars)} 字符 vs 只给 2 张表
+    ${esc(d.synthetic.two_chars)} 字符，差 <b>${esc(d.synthetic.ratio)} 倍</b> ——
+    这时候「给多少 schema」已经不是省钱问题，是放不放得进上下文的问题。</div>`;
+}
+
+async function loadDialect() {
+  const sql = encodeURIComponent($("d-sql").value);
+  const n = $("d-n").value || 10;
+  const { data: d } = await jfetch(`api/dialect?sql=${sql}&n=${n}`);
+  $("dialect").innerHTML = d.items.map(x => `
+    <div style="margin-bottom:8px">
+      <span class="tag">${esc(x.dialect)}</span>
+      <span class="ph" style="font-size:12px">${esc(x.note)}</span>
+      <pre style="margin-top:4px;max-height:90px">${esc(x.output)}</pre>
+    </div>`).join("")
+    + `<div class="ph" style="font-size:12px">标识符引用：${
+      Object.entries(d.quotes).map(([k, v]) => `${esc(k)} → <code>${esc(v)}</code>`).join(" · ")}</div>`;
+}
+
+async function loadAmbig() {
+  const { data: d } = await jfetch("api/ambiguity");
+  $("ambig").innerHTML = `<table><thead><tr><th>列名</th><th>出现在</th></tr></thead><tbody>${
+    Object.entries(d.ambiguous).map(([k, v]) =>
+      `<tr><td><code>${esc(k)}</code></td><td>${esc(v.join(", "))}</td></tr>`).join("")
+  }</tbody></table><div class="ph" style="margin-top:6px">共同名 ${esc(d.count)} 个，最严重的是 ${esc(d.worst)}</div>`;
+}
+
+async function ask() {
+  $("sql").textContent = "…"; $("answer").textContent = "…";
+  const { data: d } = await jfetch("api/ask", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ question: $("question").value.trim(), mode: $("mode").value })
+  });
+  $("sql").textContent = d.sql || "（没有生成 SQL）";
+  $("answer").textContent = d.answer || "（空）";
+  $("metas").textContent = `schema 表示 ${d.mode} · 提示词 ${d.prompt_chars} 字符 · ${d.rounds} 轮 · ${d.schema_calls} 次 MCP 调用`;
+  const rows = d.rows || [];
+  if (!rows.length) { $("rows").innerHTML = ""; return; }
+  const cols = Object.keys(rows[0]);
+  $("rows").innerHTML = `<table style="margin-top:10px"><thead><tr>${cols.map(c => `<th>${esc(c)}</th>`).join("")}</tr></thead>
+    <tbody>${rows.map(r => `<tr>${cols.map(c => `<td>${esc(r[c])}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
+}
+
+loadHealth(); loadCompare(); loadDialect(); loadAmbig();
+</script>
+</body>
+</html>

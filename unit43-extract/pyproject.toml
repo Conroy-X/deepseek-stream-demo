@@ -1,0 +1,13 @@
+[project]
+name = "unit43-extract"
+version = "0.1.0"
+description = "Unit 43：结构化要点提取，OfflineModel 规则识别 + 可溯源 source_sentence"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi[standard]>=0.115",
+    "httpx>=0.27",
+    "python-dotenv>=1.0",
+]
+
+[tool.uv]
+package = false

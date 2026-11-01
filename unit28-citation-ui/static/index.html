@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Unit 28 · 引用 UI 实验台</title>
+<style>
+  :root{--bg:#f7f7f5;--card:#fff;--line:#e3e2de;--text:#23231f;--dim:#7a7972;--accent:#185FA5;--ok:#0F6E56;--bad:#A32D2D;--warn:#854F0B}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font:14px/1.65 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;padding:20px}
+  .wrap{max-width:1120px;margin:0 auto}
+  h1{font-size:19px;font-weight:600}h2{font-size:13px;font-weight:600;color:var(--dim);margin-bottom:11px;letter-spacing:.02em}
+  .sub{color:var(--dim);font-size:13px;margin:4px 0 16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:15px;margin-bottom:14px}
+  button{padding:7px 13px;border:1px solid var(--line);border-radius:7px;background:#fff;font:inherit;font-size:13px;cursor:pointer;color:var(--text)}
+  button:hover{background:#f0efec}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{background:#0C447C}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  button.mini{padding:3px 9px;font-size:12px}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .banner{padding:9px 13px;border-radius:8px;font-size:13px;margin-bottom:14px;border:1px solid var(--line);background:var(--card)}
+  .banner.ok{border-color:#9FE1CB;background:#E1F5EE;color:var(--ok)}
+  .banner.warn{border-color:#FAC775;background:#FAEEDA;color:var(--warn)}
+  .banner.bad{border-color:#F7C1C1;background:#FCEBEB;color:var(--bad)}
+  .grid{display:grid;grid-template-columns:1.3fr 1fr;gap:14px;align-items:start}
+  @media (max-width:900px){.grid{grid-template-columns:1fr}}
+  .tag{display:inline-block;font-size:11.5px;padding:1px 7px;border-radius:20px;border:1px solid var(--line);color:var(--dim)}
+  .tag.ok{border-color:#9FE1CB;background:#E1F5EE;color:var(--ok)}
+  .tag.bad{border-color:#F7C1C1;background:#FCEBEB;color:var(--bad)}
+  .tag.warn{border-color:#FAC775;background:#FAEEDA;color:var(--warn)}
+  .answer{font-size:14.5px;line-height:1.9;min-height:80px;word-break:break-word}
+  .answer sup.cite{color:var(--accent);font-size:11px;font-weight:600;cursor:pointer;padding:0 1px;border-radius:3px}
+  .answer sup.cite:hover{background:#E6F1FB}
+  .answer sup.cite.on{background:var(--accent);color:#fff}
+  .answer sup.cite-bad{color:var(--bad);font-size:11px;font-weight:600;cursor:help;border-bottom:1px dashed var(--bad)}
+  .cite{border:1px solid var(--line);border-radius:9px;padding:9px 11px;margin-bottom:8px;font-size:12.5px;cursor:pointer}
+  .cite.on{border-color:var(--accent);box-shadow:0 0 0 2px rgba(24,95,165,.12)}
+  .cite .hd{display:flex;gap:7px;align-items:center;font-size:11.5px;color:var(--dim);margin-bottom:4px}
+  .cite .no{background:var(--accent);color:#fff;border-radius:5px;padding:0 6px;font-size:11px;font-weight:600}
+  .cite .tx{line-height:1.6}
+  .pageview{border:1px solid var(--line);border-radius:9px;padding:12px;background:#fcfcfa;font-size:13px;line-height:1.8;white-space:pre-wrap;max-height:240px;overflow:auto}
+  .pageview mark{background:#FFF3C4;padding:0 1px;border-radius:2px}
+  .probs{list-style:none;font-size:12.5px}
+  .probs li{padding:4px 0;border-bottom:1px dashed var(--line)}
+  .probs li:last-child{border:0}
+  .lvl{font-weight:600;margin-right:6px}
+  .lvl.error{color:var(--bad)}.lvl.warning{color:var(--warn)}
+  .code{font:11.5px ui-monospace,Consolas,monospace;color:var(--dim);margin-left:6px}
+  .ph{color:var(--dim);font-size:13px}
+  .note{font-size:12.5px;color:var(--warn);background:#FAEEDA;border:1px solid #FAC775;border-radius:8px;padding:8px 12px;margin-top:10px}
+  .note.bad{color:var(--bad);background:#FCEBEB;border-color:#F7C1C1}
+  .kv{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+  .log{font:11.5px ui-monospace,Consolas,monospace;color:var(--dim);max-height:110px;overflow:auto;margin-top:8px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Unit 28 · 引用 UI 实验台</h1>
+  <div class="sub">四种必须画得出来的状态：正常 / 没页码 / 未知编号 / 恶意内容</div>
+
+  <div class="banner" id="health">探测后端…</div>
+
+  <div class="card">
+    <h2>① 选一份 fixture</h2>
+    <div class="row" id="cases"></div>
+    <div class="probs" style="margin-top:11px" id="verify"><span class="ph">校验结果会显示在这里。</span></div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>② 答案（点角标）</h2>
+      <div class="answer" id="ans"><span class="ph">还没加载。</span></div>
+      <div class="row" style="margin-top:12px">
+        <button class="mini" onclick="race()">连点 [1][2][3] 演示竞态</button>
+        <span class="ph" id="racehint">丢弃过期响应 0 次</span>
+      </div>
+      <div class="log" id="log"></div>
+      <div class="note">角标有两类：可点的 <b>[1]</b>，和红色的 <b>[9]</b> —— 后者说明正文引了一个后端没给数据的编号，
+        必须显式标出来。静默丢掉的话，用户点下去没反应，只会以为是自己点错了。</div>
+    </div>
+
+    <div class="card">
+      <h2>③ 引用与跳转</h2>
+      <div id="cites"><span class="ph">点左边的角标。</span></div>
+      <div id="jumpbox"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>④ 模拟原文页（页码是真的，文件是假的）</h2>
+    <div id="pagebox"><span class="ph">点「打开原文」后显示。</span></div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+let caseName = "normal", payload = null, seq = 0, stale = 0, current = null;
+
+async function get(path) {
+  const r = await fetch(path);
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(typeof d.detail === "string" ? d.detail : ("HTTP " + r.status));
+  return d;
+}
+
+async function loadHealth() {
+  try {
+    const h = await get("health");
+    $("health").className = "banner ok";
+    $("health").textContent = `fixture ${h.cases.length} 个 · 协议白名单 ${h.allowed_schemes.join(" ")} · 定位器 v${h.locator_version} · ${h.note}`;
+    $("cases").innerHTML = h.cases.map(c => `<button data-case="${c}" onclick="load('${c}')">${c}</button>`).join("");
+  } catch (e) {
+    $("health").className = "banner bad";
+    $("health").textContent = "后端没响应：" + e.message;
+  }
+}
+
+async function load(name) {
+  caseName = name;
+  document.querySelectorAll("#cases button").forEach(b => b.classList.toggle("primary", b.dataset.case === name));
+  $("cites").innerHTML = '<span class="ph">点左边的角标。</span>';
+  $("jumpbox").innerHTML = "";
+  $("pagebox").innerHTML = '<span class="ph">点「打开原文」后显示。</span>';
+  $("log").innerHTML = "";
+  try {
+    payload = await get("api/demo/answer?case=" + encodeURIComponent(name));
+    drawAnswer();
+    drawVerify();
+    drawCites();
+  } catch (e) {
+    $("ans").innerHTML = `<span class="ph">${esc(e.message)}</span>`;
+  }
+}
+
+function drawAnswer() {
+  // 服务端已经 html.escape 过答案，这里的 HTML 只包含它自己生成的 sup
+  $("ans").innerHTML = payload.html || '<span class="ph">（空答案）</span>';
+  $("ans").querySelectorAll("sup.cite").forEach(el => {
+    el.onclick = () => pick(+el.dataset.n);
+  });
+  $("ans").querySelectorAll("sup.cite-bad").forEach(el => {
+    el.onclick = () => {
+      log(`[${el.dataset.n}] 是失效引用：正文写了它，后端没给这条数据`);
+    };
+    el.title = "这条引用在后端数据里不存在";
+  });
+}
+
+function drawVerify() {
+  const ps = payload.problems;
+  if (!ps.length) {
+    $("verify").innerHTML = `<div class="row"><span class="tag ok">可渲染</span>
+      <span class="tag">问题 0 条</span><span class="tag">${payload.request_id}</span></div>`;
+    return;
+  }
+  const head = `<div class="row" style="margin-bottom:8px">
+    <span class="tag ${payload.renderable ? "warn" : "bad"}">${payload.renderable ? "可渲染（有警告）" : "不可信，不应渲染"}</span>
+    <span class="tag">问题 ${ps.length} 条</span>
+    <span class="tag">${payload.request_id}</span></div>`;
+  $("verify").innerHTML = head + `<ul class="probs">` + ps.map(p =>
+    `<li><span class="lvl ${p.level}">${p.level}</span>${esc(p.message)}<span class="code">${esc(p.code)}</span></li>`
+  ).join("") + `</ul>`;
+}
+
+function drawCites() {
+  $("cites").innerHTML = payload.citations_view.map(c => `
+    <div class="cite" data-n="${c.id}" onclick="pick(${c.id})">
+      <div class="hd"><span class="no">[${c.id}]</span>${esc(c.title)}${c.page ? "· 第 " + c.page + " 页" : "· 无页码"}
+        <span class="tag">v${c.locator_version}</span></div>
+      <div class="tx">${c.snippet_html}</div>
+    </div>`).join("") || '<span class="ph">这份响应没有引用。</span>';
+}
+
+function citeOf(n) { return payload.citations_view.find(c => c.id === n); }
+
+async function pick(n) {
+  const token = ++seq;      // RaceGuard.begin()
+  current = n;
+  $("ans").querySelectorAll("sup.cite").forEach(el => el.classList.toggle("on", +el.dataset.n === n));
+  document.querySelectorAll(".cite").forEach(el => el.classList.toggle("on", +el.dataset.n === n));
+
+  // 故意走一次网络：这样快速连点才会真的出现「后发先至」
+  const c = citeOf(n);
+  if (!c) { log(`[${n}] 没有对应数据`); return; }
+  await new Promise(r => setTimeout(r, 120 + Math.floor(Math.random() * 160)));
+  if (token !== seq) {      // RaceGuard.accept() == false
+    stale += 1;
+    $("racehint").textContent = `丢弃过期响应 ${stale} 次`;
+    log(`[${n}] 的响应晚到，已被丢弃（当前 [${current}]）`);
+    return;
+  }
+  drawJump(c);
+}
+
+function drawJump(c) {
+  const j = c.jump || {};
+  if (j.status === "ok") {
+    $("jumpbox").innerHTML = `<div class="row" style="margin-top:6px">
+      <button class="primary" onclick="openPage('${esc(c.document_id)}', ${c.page}, ${c.id})">打开原文 第 ${c.page} 页</button>
+      <span class="tag ok">可跳转</span></div>
+      <div class="note">跳转链接是 <code>${esc(j.url)}</code>。用 <code>#page=</code> 而不是自己算滚动位置：
+        浏览器/阅读器原生支持，也不会因为缩放比例不同而错位。</div>`;
+  } else if (j.status === "no_page") {
+    $("jumpbox").innerHTML = `<div class="row" style="margin-top:6px"><span class="tag warn">不能跳页</span>
+      <span class="ph">${esc(j.reason)}</span></div>
+      <div class="note">这不是错误，是<b>能力缺失</b>。有原文、没页码（比如 .md 来源），
+        正确做法是展开片段并说明原因，而不是给一个跳到第 1 页的假链接，也不是弹「加载失败」。</div>`;
+  } else {
+    $("jumpbox").innerHTML = `<div class="row" style="margin-top:6px"><span class="tag bad">已禁用跳转</span>
+      <span class="ph">${esc(j.reason)}</span></div>
+      <div class="note bad">协议不在白名单。这种引用连「复制链接」都不该给 ——
+        <code>javascript:</code> 一粘进地址栏就是一次执行。</div>`;
+  }
+}
+
+async function openPage(docId, page, n) {
+  const c = citeOf(n);
+  try {
+    const d = await get(`api/docs/${encodeURIComponent(docId)}/pages/${page}?snippet=${encodeURIComponent(c.snippet || c.text)}`);
+    const h = d.highlight;
+    let body = esc(d.text);
+    if (h.found) {
+      const a = esc(d.text.slice(0, h.start)), b = esc(d.text.slice(h.start, h.end)), tail = esc(d.text.slice(h.end));
+      body = a + "<mark>" + b + "</mark>" + tail;
+    }
+    $("pagebox").innerHTML = `<div class="row" style="margin-bottom:8px">
+        <span class="tag">${esc(d.document_id)}</span><span class="tag">第 ${d.page} / ${d.total_pages} 页</span>
+        <span class="tag ${h.found ? "ok" : "warn"}">${h.found ? "已高亮命中区间" : "页内未命中"}</span>
+        <button class="mini" onclick="openPage('${esc(d.document_id)}', ${Math.max(1, d.page - 1)}, ${n})">上一页</button>
+        <button class="mini" onclick="openPage('${esc(d.document_id)}', ${Math.min(d.total_pages, d.page + 1)}, ${n})">下一页</button>
+      </div>
+      <div class="pageview">${body}</div>
+      ${d.degraded ? '<div class="note">页内没找到这段文字，但整页照样给出来：用户至少还能自己扫一眼。</div>' : ""}`;
+  } catch (e) {
+    $("pagebox").innerHTML = `<div class="note bad">${esc(e.message)}</div>`;
+  }
+}
+
+async function race() {
+  const ns = payload.citations_view.map(c => c.id).slice(0, 3);
+  if (!ns.length) return;
+  stale = 0;
+  $("racehint").textContent = "丢弃过期响应 0 次";
+  // 不等 await：三个请求同时在飞，谁先回来不确定
+  ns.forEach(n => pick(n));
+  log(`同时点 ${ns.map(n => "[" + n + "]").join(" ")}，只有最后一次的结果允许上屏`);
+}
+
+function log(s) {
+  const t = new Date().toLocaleTimeString("zh-CN", {hour12: false});
+  $("log").innerHTML = `<div>${t} ${esc(s)}</div>` + $("log").innerHTML;
+}
+
+loadHealth().then(() => load("normal"));
+</script>
+</body>
+</html>

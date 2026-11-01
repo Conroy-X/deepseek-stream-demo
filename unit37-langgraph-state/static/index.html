@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Unit 37 · LangGraph State</title>
+<style>
+:root{--bg:#f7f7f5;--card:#fff;--line:#e3e2de;--text:#23231f;--dim:#7a7972;--accent:#185FA5;--ok:#0F6E56;--bad:#A32D2D;--warn:#854F0B}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:14px/1.65 -apple-system,"Segoe UI","Noto Sans CJK SC",sans-serif}
+header{padding:26px 30px 18px;border-bottom:1px solid var(--line);background:var(--card)}
+h1{margin:0 0 6px;font-size:19px;font-weight:650}header p{margin:0;color:var(--dim);font-size:13px;max-width:780px}
+main{max-width:1000px;margin:0 auto;padding:22px 30px 60px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px 20px;margin-bottom:16px}
+.card h2{margin:0 0 4px;font-size:14px;font-weight:650}.card .sub{color:var(--dim);font-size:12.5px;margin:0 0 14px}
+.banner{background:#e8f3ef;border:1px solid #cfe4db;color:var(--ok);padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:16px;display:none}
+.banner.bad{background:#fbecec;border-color:#f0cfcf;color:var(--bad)}.banner.warn{background:#fbf1e3;border-color:#eee0c8;color:var(--warn)}
+pre{margin:0;background:#1e1e1c;color:#e6e4dd;padding:12px 14px;border-radius:8px;font:12px/1.55 ui-monospace,Menlo,monospace;overflow:auto;max-height:340px;white-space:pre-wrap;word-break:break-word}
+button{font:inherit;font-size:12.5px;padding:6px 13px;border-radius:7px;cursor:pointer;border:1px solid var(--line);background:#fff;color:var(--text)}
+button:hover{border-color:#c9c8c2}button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+input{font:inherit;font-size:12.5px;padding:5px 8px;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--text);width:100%}
+.nodes{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}.node{padding:6px 12px;border:1px solid var(--line);border-radius:7px;font-size:12px;background:#fcfcfb}
+.node.arrow{border:none;background:none;color:var(--dim)}
+.foot{color:var(--dim);font-size:12px;text-align:center;padding-top:8px}
+</style>
+</head>
+<body>
+<header>
+<h1>Unit 37 · LangGraph State</h1>
+<p>用 <code>TypedDict</code> 定义 State，跑通单节点图。对比手写 while 循环（Unit 34），看框架帮你省了什么。</p>
+</header>
+<main>
+<div class="banner" id="banner"></div>
+<section class="card">
+<h2>三节点图：rewrite → search → answer</h2>
+<p class="sub">每个节点只返回 partial dict，框架自动 merge 进 State。</p>
+<div class="nodes"><div class="node">rewrite</div><div class="node arrow">→</div><div class="node">search</div><div class="node arrow">→</div><div class="node">answer</div><div class="node arrow">→</div><div class="node">END</div></div>
+<div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+<input id="q" value="MCP 是什么？" style="flex:1;min-width:200px">
+<button class="primary" id="btnRun">跑</button>
+</div>
+<pre id="out" style="min-height:120px">点「跑」。</pre>
+</section>
+<section class="card">
+<h2>Merge vs 覆盖</h2>
+<p class="sub">返回的字段覆盖旧值，没返回的字段保留。Top-level key merge，不是 deep merge。</p>
+<button class="primary" id="btnMerge">演示</button>
+<pre id="mergeOut" style="margin-top:10px;min-height:80px">点按钮。</pre>
+</section>
+<div class="foot">8037 · 离线自检见 <code>python main.py</code></div>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function banner(m,k){const e=$('banner');e.textContent=m;e.className='banner'+(k?' '+k:'');e.style.display=m?'block':'none';}
+async function getJSON(u,o){const r=await fetch(u,o);if(!r.ok)throw new Error(u+' → '+r.status);return r.json();}
+$('btnRun').onclick=async()=>{try{const d=await getJSON('/api/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:$('q').value})});$('out').textContent=JSON.stringify(d,null,2);banner('跑完了，答案一致：'+d.same_answer,'ok');}catch(e){banner(e.message,'bad');}};
+$('btnMerge').onclick=async()=>{try{const d=await getJSON('/api/merge');$('mergeOut').textContent=JSON.stringify(d,null,2);banner('question 被覆盖：'+d.question_overwritten+'，answer 被补上：'+d.answer_added,'ok');}catch(e){banner(e.message,'bad');}};
+</script>
+</body>
+</html>

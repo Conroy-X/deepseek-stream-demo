@@ -1,0 +1,13 @@
+[project]
+name = "unit21-citation"
+version = "0.1.0"
+description = "Unit 21：引用编号解析、覆盖率与伪造检测、原文定位、先转义后替换的渲染"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi[standard]>=0.115",
+    "httpx>=0.27",
+    "python-dotenv>=1.0",
+]
+
+[tool.uv]
+package = false

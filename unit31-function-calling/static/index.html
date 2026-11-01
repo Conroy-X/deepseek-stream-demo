@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Unit 31 · Function Calling 实验台</title>
+<style>
+  :root{--bg:#f7f7f5;--card:#fff;--line:#e3e2de;--text:#23231f;--dim:#7a7972;--accent:#185FA5;--ok:#0F6E56;--bad:#A32D2D;--warn:#854F0B}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font:14px/1.65 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;padding:20px}
+  .wrap{max-width:1000px;margin:0 auto}
+  h1{font-size:19px;font-weight:600}h2{font-size:13px;font-weight:600;color:var(--dim);margin-bottom:11px}
+  .sub{color:var(--dim);font-size:13px;margin:4px 0 16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:15px;margin-bottom:14px}
+  button{padding:7px 13px;border:1px solid var(--line);border-radius:7px;background:#fff;font:inherit;font-size:13px;cursor:pointer;color:var(--text)}
+  button:hover{background:#f0efec}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  input{padding:8px 11px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:13.5px;background:#fff;color:var(--text)}
+  .row{display:flex;gap:8px;align-items:center}
+  .banner{padding:9px 13px;border-radius:8px;font-size:13px;margin-bottom:14px;border:1px solid var(--line);background:var(--card)}
+  .banner.ok{border-color:#9FE1CB;background:#E1F5EE;color:var(--ok)}
+  .step{border:1px solid var(--line);border-radius:9px;padding:10px 12px;margin-bottom:8px;background:#fbfbf9}
+  .step .hd{font-size:11.5px;color:var(--dim);margin-bottom:5px;display:flex;gap:8px;align-items:center}
+  .step pre{font:12px/1.7 ui-monospace,"Cascadia Code",monospace;white-space:pre-wrap;word-break:break-word}
+  .ans{background:#E1F5EE;border:1px solid #9FE1CB;border-radius:9px;padding:11px 13px;font-size:14px;color:#0B4F3D}
+  .tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:20px;border:1px solid var(--line);color:var(--dim)}
+  .tag.ok{background:#E1F5EE;border-color:#9FE1CB;color:var(--ok)}
+  .tag.bad{background:#FCEBEB;border-color:#F5C4C4;color:var(--bad)}
+  .err{color:var(--bad);font-size:12.5px}
+  .note{font-size:12.5px;color:var(--warn);background:#FAEEDA;border:1px solid #FAC775;border-radius:8px;padding:8px 12px;margin-top:10px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Unit 31 · Function Calling 实验台</h1>
+  <div class="sub">模型只负责说"调哪个工具、传什么参数"，执行和回填是你的活</div>
+
+  <div class="banner" id="health">探测后端…</div>
+
+  <div class="card">
+    <div class="row">
+      <input id="q" style="flex:1" value="上海今天天气怎么样">
+      <button class="primary" onclick="chat()">发问</button>
+      <button onclick="quick('(120-30)*0.8 等于多少')">试算术</button>
+      <button onclick="quick('杭州天气怎么样')">试非法城市</button>
+    </div>
+    <div id="out" style="margin-top:12px"></div>
+  </div>
+
+  <div class="card">
+    <h2>工具声明（模型就是照这个传参的）</h2>
+    <div id="tools"></div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+async function j(path, opt) {
+  const r = await fetch(path, opt);
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.detail || ("HTTP " + r.status));
+  return d;
+}
+async function loadHealth() {
+  try {
+    const h = await j("health");
+    $("health").className = "banner ok";
+    $("health").textContent = `工具：${h.tools.join(" / ")} · 模型：${h.model} · 最大轮次 ${h.max_rounds}`;
+    const t = await j("tools");
+    $("tools").innerHTML = t.tools.map(x => {
+      const f = x.function;
+      return `<div class="step"><div class="hd"><b>${f.name}</b><span class="tag">${f.parameters.required.join(", ")} 必填</span></div>
+        <div style="font-size:12.5px;color:var(--dim);margin-bottom:4px">${esc(f.description)}</div>
+        <pre>${esc(JSON.stringify(f.parameters.properties, null, 2))}</pre></div>`;
+    }).join("");
+  } catch (e) {
+    $("health").className = "banner warn";
+    $("health").textContent = "后端没响应：" + e.message;
+  }
+}
+function quick(t) { $("q").value = t; chat(); }
+async function chat() {
+  const q = $("q").value.trim();
+  if (!q) return;
+  try {
+    const d = await j("chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: q }) });
+    const steps = d.trace.map(t => {
+      if (t.tool) {
+        const r = t.result;
+        return `<div class="step"><div class="hd"><span class="tag ${r.ok ? "ok" : "bad"}">执行工具</span> ${t.tool} <span>第 ${t.round} 轮</span></div>
+          <pre>args = ${esc(JSON.stringify(t.args, null, 0))}
+result = ${esc(r.content)}</pre></div>`;
+      }
+      const m = t.response;
+      if (m.tool_calls) {
+        return `<div class="step"><div class="hd"><span class="tag">模型响应</span> 第 ${t.round} 轮 · 要求调用 ${m.tool_calls.length} 个工具</div>
+          <pre>${esc(JSON.stringify(m.tool_calls, null, 2))}</pre></div>`;
+      }
+      return `<div class="step"><div class="hd"><span class="tag">模型响应</span> 第 ${t.round} 轮 · 直接回答</div></div>`;
+    }).join("");
+    $("out").innerHTML = `${steps}
+      <div class="ans" style="margin-top:10px"><b>最终回答：</b>${esc(d.answer)}</div>
+      <div class="note">共 ${d.rounds} 轮，结束原因：${d.stopped}。
+        注意 role=tool 的消息必须带 tool_call_id，否则真模型会 400。</div>`;
+  } catch (e) {
+    $("out").innerHTML = `<div class="err">失败：${esc(e.message)}</div>`;
+  }
+}
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+loadHealth();
+chat();
+</script>
+</body>
+</html>

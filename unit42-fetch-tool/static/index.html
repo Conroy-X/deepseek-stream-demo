@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Unit 42 · 抓网页正文 实验台</title>
+<style>
+  :root{--bg:#f7f7f5;--card:#fff;--line:#e3e2de;--text:#23231f;--dim:#7a7972;--accent:#185FA5;--ok:#0F6E56;--bad:#A32D2D;--warn:#854F0B}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font:14px/1.65 -apple-system,"Segoe UI","Microsoft YaHei",sans-serif;padding:20px}
+  .wrap{max-width:1000px;margin:0 auto}
+  h1{font-size:19px;font-weight:600}
+  h2{font-size:13px;font-weight:600;color:var(--dim);margin-bottom:11px}
+  .sub{color:var(--dim);font-size:13px;margin:4px 0 16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:15px;margin-bottom:14px}
+  button{padding:7px 13px;border:1px solid var(--line);border-radius:7px;background:#fff;font:inherit;font-size:13px;cursor:pointer;color:var(--text)}
+  button:hover{background:#f0efec}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  input{padding:8px 11px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:13.5px;background:#fff;color:var(--text);width:100%}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .banner{padding:9px 13px;border-radius:8px;font-size:13px;margin-bottom:14px;border:1px solid var(--line);background:var(--card)}
+  .banner.ok{border-color:#9FE1CB;background:#E1F5EE;color:var(--ok)}
+  .banner.bad{border-color:#F5C4C4;background:#FCEBEB;color:var(--bad)}
+  .tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:20px;border:1px solid var(--line);color:var(--dim)}
+  .tag.ok{background:#E1F5EE;border-color:#9FE1CB;color:var(--ok)}
+  .tag.bad{background:#FCEBEB;border-color:#F5C4C4;color:var(--bad)}
+  pre{font:12px/1.7 ui-monospace,"Cascadia Code",monospace;white-space:pre-wrap;word-break:break-word;background:#fbfbf9;border:1px solid var(--line);border-radius:7px;padding:10px;max-height:260px;overflow:auto}
+  .err{color:var(--bad);font-size:12.5px}
+  .meta{font-size:12.5px;color:var(--dim);margin-bottom:8px}
+  details summary{cursor:pointer;font-size:13px;color:var(--accent)}
+  .picks button{margin-right:6px;margin-bottom:6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Unit 42 · 抓网页正文 实验台</h1>
+  <div class="sub">3 个 HTML fixture · 重点看「先去 script/style/nav 再去标签」的顺序</div>
+
+  <div class="banner" id="health">探测后端…</div>
+
+  <div class="card">
+    <h2>URL 输入（fixture 里的 3 个 URL 之一）</h2>
+    <div class="row">
+      <input id="url" value="https://example.com/mcp-intro">
+      <button class="primary" onclick="doFetch()">抓取 + 清洗</button>
+    </div>
+    <div class="row picks" style="margin-top:10px" id="picks"></div>
+    <div id="meta" class="meta" style="margin-top:10px"></div>
+  </div>
+
+  <div class="card">
+    <h2>清洗后正文（<code>text</code> 字段）</h2>
+    <pre id="text">还没有抓</pre>
+  </div>
+
+  <div class="card">
+    <details>
+      <summary>展开看原始 HTML（<code>raw</code>，对比能看出 script/style/nav/广告是怎么被剥掉的）</summary>
+      <pre id="raw" style="margin-top:8px">还没有抓</pre>
+    </details>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+async function j(path, opt) {
+  const r = await fetch(path, opt);
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.detail || ("HTTP " + r.status));
+  return d;
+}
+const post = (p, body) => j(p, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+
+let RAW_HTML = "";
+
+async function boot() {
+  try {
+    const h = await j("health");
+    $("health").className = "banner ok";
+    $("health").textContent = `后端就绪 · fixture ${h.fixture_count} 个 URL`;
+    const fx = await j("fixtures");
+    $("picks").innerHTML = fx.items.map(x => `<button onclick="pick('${esc(x.url)}')">${esc(x.fixture)}</button>`).join("");
+    doFetch();
+  } catch (e) {
+    $("health").className = "banner bad";
+    $("health").textContent = "后端没响应：" + e.message;
+  }
+}
+
+function pick(u) { $("url").value = u; doFetch(); }
+
+async function doFetch() {
+  const url = $("url").value.trim();
+  if (!url) { $("text").textContent = "URL 不能为空"; return; }
+  try {
+    const d = await post("fetch", { url });
+    $("meta").innerHTML = `标题：<b>${esc(d.title)}</b> · raw=<span class="tag">${d.raw_length}</span> clean=<span class="tag ok">${d.length}</span> · 比例 ${(d.length / d.raw_length).toFixed(2)} · fixture=<span class="tag">${esc(d.fixture)}</span>`;
+    $("text").textContent = d.text || "（空正文）";
+    // 原始 HTML 需要单独读 fixture —— fetch 接口只返回清洗后文本
+    // 这里通过 fetch 模块在 server side 已经剥掉了 raw。我们用 esc 显示清洗后 text 之前的简短原始预览
+    // 实际 raw 不在响应里，给个提示让用户看 /fixtures + 文件
+    $("raw").textContent = "原始 HTML 不在 /fetch 响应里（接口只回清洗后 text）。看 data/" + d.fixture + " 文件，或 /docs 拉接口树。";
+  } catch (e) {
+    $("text").innerHTML = `<span class="err">失败：${esc(e.message)}</span>`;
+    $("meta").textContent = "";
+    $("raw").textContent = "";
+  }
+}
+
+boot();
+</script>
+</body>
+</html>

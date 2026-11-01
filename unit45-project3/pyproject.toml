@@ -1,0 +1,13 @@
+[project]
+name = "unit45-project3"
+version = "0.1.0"
+description = "Unit 45：Research Agent，LangGraph StateGraph 编排 search→fetch→extract→analyze→report"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi[standard]>=0.115",
+    "httpx>=0.27",
+    "python-dotenv>=1.0",
+]
+
+[tool.uv]
+package = false

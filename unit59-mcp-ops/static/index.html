@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Unit 59 · MCP 工程化</title>
+<style>
+  :root{--bg:#f7f7f5;--card:#fff;--line:#e3e2de;--text:#23231f;--dim:#7a7972;
+        --accent:#185FA5;--ok:#0F6E56;--bad:#A32D2D;--warn:#854F0B}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+       font:14px/1.65 -apple-system,"Segoe UI","Noto Sans CJK SC",sans-serif}
+  header{padding:26px 30px 18px;border-bottom:1px solid var(--line);background:var(--card)}
+  h1{margin:0 0 6px;font-size:19px;font-weight:650}
+  header p{margin:0;color:var(--dim);font-size:13px;max-width:780px}
+  main{max-width:1100px;margin:0 auto;padding:22px 30px 60px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px 20px;margin-bottom:16px}
+  .card h2{margin:0 0 4px;font-size:14px;font-weight:650}
+  .card .sub{color:var(--dim);font-size:12.5px;margin:0 0 14px}
+  .tag{display:inline-block;padding:1px 7px;border-radius:5px;font-size:11.5px;background:#eef2f7;color:var(--accent);margin-right:6px}
+  .tag.ok{background:#e8f3ef;color:var(--ok)}
+  .tag.bad{background:#fbecec;color:var(--bad)}
+  .tag.warn{background:#fbf1e3;color:var(--warn)}
+  .banner{background:#e8f3ef;border:1px solid #cfe4db;color:var(--ok);padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:16px;display:none}
+  .banner.bad{background:#fbecec;border-color:#f0cfcf;color:var(--bad)}
+  .banner.warn{background:#fbf1e3;border-color:#eee0c8;color:var(--warn)}
+  pre{margin:0;background:#1e1e1c;color:#e6e4dd;padding:12px 14px;border-radius:8px;font:12px/1.55 ui-monospace,Menlo,monospace;overflow:auto;max-height:300px;white-space:pre-wrap;word-break:break-word}
+  button{font:inherit;font-size:12.5px;padding:6px 13px;border-radius:7px;cursor:pointer;border:1px solid var(--line);background:#fff;color:var(--text)}
+  button:hover{border-color:#c9c8c2}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
+  th{color:var(--dim);font-weight:500;font-size:11.5px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .foot{color:var(--dim);font-size:12px;text-align:center;padding-top:8px}
+  @media(max-width:860px){.grid2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Unit 59 · MCP 工程化</h1>
+  <p>日志（结构化 + 白名单 + 敏感打码）、超时（asyncio.wait_for）、并发（trace_id 不串）、错误码（E_ 前缀 + 对外不含 traceback）。</p>
+</header>
+<main>
+  <div class="banner" id="banner"></div>
+  <section class="card">
+    <h2>结构化日志 + 超时</h2>
+    <p class="sub">快工具成功、慢工具超时被捕获、炸工具也被接住。</p>
+    <button class="primary" id="btnLogs">跑一遍</button>
+    <pre id="logsOut" style="margin-top:10px;min-height:80px">点按钮。</pre>
+  </section>
+  <section class="card">
+    <h2>并发：5 个调用</h2>
+    <p class="sub">每个独立 trace_id，不串号。</p>
+    <button class="primary" id="btnConc">跑 5 个并发</button>
+    <pre id="concOut" style="margin-top:10px;min-height:80px">点按钮。</pre>
+  </section>
+  <section class="card">
+    <h2>错误码表</h2>
+    <table id="ecTable"><thead><tr><th>码</th><th>说明</th></tr></thead><tbody></tbody></table>
+  </section>
+  <div class="foot">8059 · 离线自检见 <code>python main.py</code></div>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function banner(m,k){const e=$('banner');e.textContent=m;e.className='banner'+(k?' '+k:'');e.style.display=m?'block':'none';}
+async function getJSON(u,o){const r=await fetch(u,o);if(!r.ok)throw new Error(u+' → '+r.status);return r.json();}
+$('btnLogs').onclick=async()=>{try{const d=await getJSON('/api/logs');$('logsOut').textContent=d.dump;banner(`3 条日志，${d.redacted} 处打码，${d.dropped.length} 个字段被剔除`,'ok');}catch(e){banner(e.message,'bad');}};
+$('btnConc').onclick=async()=>{try{const d=await getJSON('/api/concurrent');$('concOut').textContent=JSON.stringify(d,null,2);banner(`5 个并发完成，${d.unique_trace_ids} 个唯一 trace_id`,'ok');}catch(e){banner(e.message,'bad');}};
+async function loadEC(){const d=await getJSON('/api/error-codes');$('ecTable').querySelector('tbody').innerHTML=Object.entries(d.codes).map(([k,v])=>`<tr><td><span class="tag">${esc(k)}</span></td><td>${esc(v)}</td></tr>`).join('');}
+loadEC();
+</script>
+</body>
+</html>

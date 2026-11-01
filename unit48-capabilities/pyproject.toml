@@ -1,0 +1,13 @@
+[project]
+name = "unit48-capabilities"
+version = "0.1.0"
+description = "Unit 48：三大能力（Tools / Resources / Prompts 的边界与控制轴）"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi[standard]>=0.115",
+    "httpx>=0.27",
+    "python-dotenv>=1.0",
+]
+
+[tool.uv]
+package = false

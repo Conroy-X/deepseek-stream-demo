@@ -1,0 +1,14 @@
+[project]
+name = "unit53-agent-mcp"
+version = "0.1.0"
+description = "Unit 53：Agent + MCP（input_schema 转 OpenAI function tool）"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi[standard]>=0.115",
+    "httpx>=0.27",
+    "python-dotenv>=1.0",
+    "mcp>=2.0,<3",
+]
+
+[tool.uv]
+package = false
