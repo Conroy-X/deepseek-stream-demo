@@ -257,6 +257,12 @@ def parse_bytes(name: str, data: bytes) -> ParsedDoc:
 
     text = "\n".join(pages)
     if not text.strip():
+        # PDF 全空票多半是扫描件：不给明确理由的话，用户只会看到"解析结果为空"，
+        # 然后以为是文件坏了。这里把"需要 OCR"说出来，下游才知道该走哪条路。
+        if kind == "pdf":
+            raise ParseError(
+                f"PDF 共 {len(pages)} 页但没有任何文本层，疑似扫描件，需要 OCR（本单元不提供）"
+            )
         raise ParseError("解析结果为空：文件里没有可提取的文字")
 
     meta["lines"] = text.count("\n") + 1

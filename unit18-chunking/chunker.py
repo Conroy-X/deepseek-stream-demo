@@ -272,6 +272,11 @@ def semantic_chunks(
         # overlap > 0 时，把上一组的最后一句带进来（句子级重叠，不切断句子）
         start_idx = g[0] - 1 if (overlap > 0 and gi > 0) else g[0]
         s, end = spans[start_idx][1], spans[g[-1]][2]
+        if gi == len(groups) - 1:
+            # 最后一块吃到文末：句子切分不会把末尾的空白/换行算进任何句子，
+            # 不补这一步，去重覆盖率永远差那么一两个字符（实测 0.999195）。
+            # 内容没丢，但 Citation 的偏移是连续的，裂缝迟早会变成错位。
+            end = len(text)
         out.append((text[s:end], s, end))
     return out
 
