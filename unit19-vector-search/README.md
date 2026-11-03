@@ -23,7 +23,7 @@ uv run uvicorn main:app --reload --port 8019
 uv run python main.py
 ```
 
-72 项，全离线：struct 往返、UPSERT 覆盖、分数降序、`top_k` 与阈值边界、
+75 项，全离线：struct 往返、UPSERT 覆盖、分数降序、`top_k` 与阈值边界、
 三种 metadata 过滤、白名单拒绝、空库、维度不匹配、Recall/MRR 手算例子、
 真实语料评测、持久化、2000×512 全量扫描耗时、HTTP 层。
 
@@ -33,9 +33,12 @@ uv run python main.py
 | --- | --- |
 | `store.py` | SQLite 存 chunk + float32 向量，暴力检索 + 过滤 + 阈值 |
 | `metrics.py` | `recall_at_k` / `reciprocal_rank` / `evaluate`（口径写死在一个地方） |
-| `main.py` | FastAPI 路由 + 27 段语料 + 12 题评测 + 72 项自检 |
+| `main.py` | FastAPI 路由 + 27 段语料 + 12 题评测 + 75 项自检 |
 | `embedding.py` | 从 Unit 15 复制（本地哈希向量，离线免费） |
 | `static/index.html` | 查询 + 阈值滑杆 + 分数条 + 指标卡片 |
+| `verify_eval.py` | **实测复现**：四张表 + 干扰段对照 + 过滤评测，全部带断言 |
+| `check_env.py` | 环境自检 19 项：依赖、目录、embedder、端口 |
+| `smoke.sh` | 端到端冒烟 18 项：真起 uvicorn、真打 HTTP |
 | `data/vectors.db` | 首次运行生成，可随时删掉重建 |
 
 ## 实测（12 题，27 段语料：16 段正文 + 11 段干扰）
@@ -63,6 +66,29 @@ uv run python main.py
 
 0.15 是这一版语料的拐点：召回一点没掉，平均返回从 3 条降到 2.08 条（噪声少 31%）。
 再往上就开始误伤 —— **阈值不是越高越好，它和模型绑定，换 embedder 必须重标**。
+
+## 复现所有实测数字
+
+```bash
+uv run python verify_eval.py     # README 四张表 + 干扰段对照 + 过滤评测（含断言）
+uv run python check_env.py       # 19 项环境检查
+bash smoke.sh                    # 18 项端到端冒烟（真起 8019）
+```
+
+`verify_eval.py` 的每条断言都对应本文档里的一个数字，**改了代码但没改文档，它会红**。
+这是刻意的：手抄的数字会过期，脚本不会。
+
+其中一条断言值得单独看 —— 它推翻了我原来的说法：
+
+```
+[4] 对照实验：只用 16 段正文（去掉 11 段干扰）
+| 16 段正文（干净） | Recall@1 0.917 | Recall@10 1.000 | MRR@10 0.933 |
+| 27 段（含干扰）   | Recall@1 0.917 | Recall@10 1.000 | MRR@10 0.925 |
+
+「住宿费一晚最多报多少」：干净语料 rank=5 → 加干扰后 rank=10
+```
+
+干净语料上它就不是第 1 了。**语义盲区先起作用，干扰段只是放大器**。
 
 ## 接口
 
@@ -107,7 +133,7 @@ Recall 用一套判定、MRR 用另一套，两个数字会互相打架。所以
 - [ ] `uv run python main.py` → 72 通过 / 0 失败
 - [ ] 页面输入「退款多久到账」，第一条是 `policy:2:08`
 - [ ] 阈值从 0 拉到 0.3，返回条数单调减少，最后出现「全被剪掉」
-- [ ] 点 `refund` 过滤，结果里只剩退款类，且条数变少
+- [ ] 点 `refund` 过滤，结果里只剩退款类；**注意条数不变**（refund 有 5 段 ≥ top_k 3），变的是内容相关性 —— 见 `verify_eval.py` 的 [5]
 - [ ] 把 top_k 从 3 改到 10，Recall 变大、MRR 不变（能解释为什么）
 - [ ] 能说出 11/12 那题为什么丢，以及换真 embedding 会怎么变
 

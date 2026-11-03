@@ -385,6 +385,27 @@ if __name__ == "__main__":
     rnone = store.search([0.0, 1.0, 0.0, 0.0], top_k=5, filters={"category": "nope"})
     check("过滤无结果返回空列表（不报错）", rnone.hits == [])
 
+    # 回归防线：真实语料是**扁平结构**（category 在顶层，没有 meta 包裹）。
+    # 只测 meta 形状会漏掉「upsert 把顶层字段丢掉」这个 bug —— 它让前端过滤器永远返回空。
+    # 用独立内存库，不污染上面那个 store 的计数与排序断言。
+    flat_store = VectorStore(":memory:", dim=4)
+    flat_store.upsert([
+        {"id": "f1", "text": "扁平结构的退款段", "vector": [0.0, 1.0, 0.0, 0.0],
+         "source": "policy.md", "page": 3, "category": "refund"},
+        {"id": "f2", "text": "扁平结构的年假段", "vector": [1.0, 0.0, 0.0, 0.0],
+         "source": "handbook.md", "page": 3, "category": "hr"},
+    ])
+    rflat = flat_store.search([0.0, 1.0, 0.0, 0.0], top_k=5, filters={"category": "refund"})
+    check("顶层 category（扁平结构）也能过滤", {h.id for h in rflat.hits} == {"f1"},
+          f"命中 {sorted(h.id for h in rflat.hits)}，应为 ['f1']")
+    got_flat = flat_store.get("f1")
+    check("顶层 category 被提升进 meta（前端可直接读）",
+          got_flat is not None and got_flat.meta.get("category") == "refund",
+          str(got_flat.meta if got_flat else None))
+    rflat_page = flat_store.search([0.0, 1.0, 0.0, 0.0], top_k=5,
+                                   filters={"category": "refund", "page": 3})
+    check("扁平结构的 meta 过滤能和 page 叠加", len(rflat_page.hits) == 1, str(len(rflat_page.hits)))
+
     print("\n  —— 参数校验（拒绝要比静默出错强）——")
     ok, msg = raises(lambda: store.search([0.0, 1.0, 0.0, 0.0], top_k=0))
     check("top_k=0 被拒绝", ok, msg)

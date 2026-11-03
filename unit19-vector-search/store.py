@@ -132,6 +132,12 @@ def cosine(a: list[float], b: list[float]) -> float:
 # ---------------------------------------------------------------------------
 # 存储
 # ---------------------------------------------------------------------------
+# 顶层可过滤字段：语料是扁平结构（category 在顶层），而 _where 按
+# json_extract(meta, '$.category') 过滤。不在这里提升一次，字段就被静默丢掉 ——
+# 表现是「传了 filters 却返回空」，而且自检用 meta 形状的数据测，永远发现不了。
+PROMOTE_TO_META = ("category", "tenant")
+
+
 class VectorStore:
     """一个 chunk 表 + 一个暴力检索。
 
@@ -160,6 +166,11 @@ class VectorStore:
         rows = []
         for it in items:
             vec = [float(x) for x in it["vector"]]
+            # 顶层可过滤字段并进 meta（显式 meta 优先，不覆盖调用方给的）
+            meta = dict(it.get("meta") or {})
+            for key in PROMOTE_TO_META:
+                if key in it and key not in meta:
+                    meta[key] = it[key]
             if self.dim is None:
                 self.dim = len(vec)
             elif len(vec) != self.dim:
@@ -172,7 +183,7 @@ class VectorStore:
                     str(it["text"]),
                     pack_vector(vec),
                     len(vec),
-                    json.dumps(it.get("meta") or {}, ensure_ascii=False, sort_keys=True),
+                    json.dumps(meta, ensure_ascii=False, sort_keys=True),
                 )
             )
         self.conn.executemany(
