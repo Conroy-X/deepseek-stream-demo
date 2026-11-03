@@ -11,11 +11,15 @@ from __future__ import annotations
 
 import os
 import sys
+from pathlib import Path
 
+from dotenv import load_dotenv
 from sqlalchemy import create_engine, text
 
+load_dotenv(Path(__file__).with_name(".env"))
+
 # 复用 Unit 11 的库：同一个 ai_journey，避免再建一个数据库
-DEFAULT_URL = "postgresql+psycopg://postgres:postgres@127.0.0.1:5432/ai_journey"
+DEFAULT_URL = "postgresql+psycopg://rik@/ai_journey?host=/var/run/postgresql"
 DATABASE_URL = os.getenv("DATABASE_URL", DEFAULT_URL).strip()
 
 ok = 0

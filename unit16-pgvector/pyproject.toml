@@ -10,6 +10,7 @@ dependencies = [
     "pgvector>=0.3",
     "python-dotenv>=1.0",
     "httpx>=0.27",
+    "numpy>=2.0",  # 只给 bench.py 造数用，服务和单元逻辑不依赖它
 ]
 
 [tool.uv]

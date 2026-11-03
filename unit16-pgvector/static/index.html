@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Unit 16 · pgvector</title>
+<style>
+  :root {
+    --bg: #f7f7f5; --card: #ffffff; --line: #e3e1da; --text: #2c2c2a;
+    --muted: #6f6d66; --accent: #185fa5; --accent-soft: #e6f1fb;
+    --ok: #0f6e56; --ok-soft: #e1f5ee; --warn: #854f0b; --warn-soft: #faeeda;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 28px 20px 60px; background: var(--bg); color: var(--text);
+    font: 14px/1.6 -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; }
+  h1 { font-size: 19px; font-weight: 600; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 13px; margin-bottom: 20px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; margin-bottom: 14px;
+  }
+  .card h2 { font-size: 14px; font-weight: 600; margin: 0 0 4px; }
+  .hint { color: var(--muted); font-size: 12px; margin: 0 0 12px; }
+  label { display: block; font-size: 12px; color: var(--muted); margin: 8px 0 4px; }
+  input[type=text], input[type=number], textarea, select {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 7px;
+    font: inherit; background: #fff; color: var(--text);
+  }
+  textarea { resize: vertical; min-height: 64px; }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  button {
+    padding: 8px 14px; border-radius: 7px; border: 1px solid var(--accent);
+    background: var(--accent); color: #fff; font: inherit; cursor: pointer;
+  }
+  button.ghost { background: #fff; color: var(--accent); }
+  button.ghost.on { background: var(--accent-soft); }
+  button:disabled { opacity: .55; cursor: default; }
+  .out {
+    margin-top: 12px; padding: 10px 12px; border-radius: 7px; font-size: 12px;
+    font-family: ui-monospace, Consolas, monospace; white-space: pre-wrap;
+    background: #fafaf8; border: 1px solid var(--line); max-height: 300px; overflow: auto;
+  }
+  .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; }
+  .pill.ok { background: var(--ok-soft); color: var(--ok); }
+  .pill.warn { background: var(--warn-soft); color: var(--warn); }
+  .score { font-weight: 600; color: var(--accent); }
+  .item { padding: 8px 0; border-bottom: 1px dashed var(--line); }
+  .item:last-child { border-bottom: 0; }
+  .meta { color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Unit 16 · pgvector</h1>
+  <div class="sub">把向量存进 Postgres，让"相似"变成一条能索引的 SQL。端口 8016，与 Unit 15 的 8015 不冲突。</div>
+
+  <div class="grid">
+    <div>
+      <div class="card">
+        <h2>1 · 建表 <span id="initState" class="pill">未执行</span></h2>
+        <p class="hint">CREATE EXTENSION vector + chunks 表（vector(512)）+ md5 唯一索引。幂等，可重复点。</p>
+        <div class="row">
+          <button onclick="callState('POST','/init',null,'initState')">POST /init</button>
+          <button class="ghost" onclick="loadStats()">刷新统计</button>
+        </div>
+        <div class="out" id="initOut">等待执行…</div>
+      </div>
+
+      <div class="card">
+        <h2>2 · 入库</h2>
+        <p class="hint">文本 → 向量（哈希后端，512 维，L2 归一化）→ INSERT。重复文本会复用同一行。</p>
+        <label>文本</label>
+        <textarea id="insText">pgvector 让 Postgres 支持向量列和余弦距离算子</textarea>
+        <label>meta（JSON，可空）</label>
+        <input type="text" id="insMeta" placeholder='{"src":"ui"}'>
+        <div class="row" style="margin-top:10px">
+          <button onclick="doInsert()">POST /insert</button>
+        </div>
+        <div class="out" id="insOut">等待执行…</div>
+      </div>
+
+      <div class="card">
+        <h2>3 · 统计</h2>
+        <p class="hint">行数、表大小、索引大小 —— 填 notes.md 实测表用。</p>
+        <div class="out" id="statsOut">点"刷新统计"</div>
+      </div>
+
+      <div class="card">
+        <h2>4 · 索引</h2>
+        <p class="hint">HNSW 空表也能建；IVFFlat 必须在有数据之后建，否则等于白建。</p>
+        <div class="row">
+          <button class="ghost" onclick="doIndex('hnsw')">建 HNSW</button>
+          <button class="ghost" onclick="doIndex('ivfflat')">建 IVFFlat</button>
+          <button class="ghost" onclick="doIndex('none')">删索引</button>
+        </div>
+        <div class="out" id="idxOut">等待执行…</div>
+      </div>
+    </div>
+
+    <div>
+      <div class="card">
+        <h2>5 · 检索</h2>
+        <p class="hint">ORDER BY emb &lt;=&gt; qv LIMIT k。关掉"走索引"就 SET LOCAL enable_indexscan=off 强制全表扫，用来对比耗时。</p>
+        <label>查询</label>
+        <input type="text" id="qText" value="向量检索 余弦距离">
+        <div class="row" style="margin-top:8px">
+          <div style="flex:1">
+            <label>top_k</label>
+            <input type="number" id="qTopK" value="5" min="1" max="50">
+          </div>
+          <div style="flex:1">
+            <label>选项</label>
+            <div class="row">
+              <button class="ghost on" id="btnIdx" onclick="toggleIdx()">走索引</button>
+              <button class="ghost" id="btnPlan" onclick="togglePlan()">看计划</button>
+            </div>
+          </div>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <button onclick="doSearch()">POST /search</button>
+          <span class="meta" id="took"></span>
+        </div>
+        <div id="results"></div>
+        <div class="out" id="planOut" style="display:none"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = location.origin;
+let useIndex = true, showPlan = false;
+
+function toggleIdx() {
+  useIndex = !useIndex;
+  const b = document.getElementById('btnIdx');
+  b.classList.toggle('on', useIndex);
+  b.textContent = useIndex ? '走索引' : '强制全表扫';
+}
+function togglePlan() {
+  showPlan = !showPlan;
+  document.getElementById('btnPlan').classList.toggle('on', showPlan);
+}
+
+async function callState(method, path, body, stateId) {
+  const out = document.getElementById('initOut');
+  try {
+    const res = await fetch(API + path, {
+      method, headers: { 'Content-Type': 'application/json' },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const data = await res.json();
+    out.textContent = JSON.stringify(data, null, 2);
+    if (stateId) {
+      const s = document.getElementById(stateId);
+      s.className = 'pill ' + (data.ok ? 'ok' : 'warn');
+      s.textContent = data.ok ? '已建表' : '失败';
+    }
+    loadStats();
+  } catch (e) { out.textContent = '请求失败：' + e; }
+}
+
+async function doInsert() {
+  const text = document.getElementById('insText').value.trim();
+  const metaRaw = document.getElementById('insMeta').value.trim();
+  let meta = null;
+  if (metaRaw) { try { meta = JSON.parse(metaRaw); } catch { meta = { raw: metaRaw }; } }
+  const out = document.getElementById('insOut');
+  out.textContent = '请求中…';
+  try {
+    const res = await fetch(API + '/insert', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, meta }),
+    });
+    out.textContent = JSON.stringify(await res.json(), null, 2);
+    loadStats();
+  } catch (e) { out.textContent = '请求失败：' + e; }
+}
+
+async function doSearch() {
+  const query = document.getElementById('qText').value.trim();
+  const top_k = parseInt(document.getElementById('qTopK').value, 10) || 5;
+  const box = document.getElementById('results');
+  const planOut = document.getElementById('planOut');
+  box.innerHTML = '<div class="meta">查询中…</div>';
+  try {
+    const res = await fetch(API + '/search', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, top_k, use_index: useIndex, explain: showPlan }),
+    });
+    const data = await res.json();
+    if (data.detail) { box.innerHTML = '<div class="meta">' + data.detail + '</div>'; return; }
+    document.getElementById('took').textContent =
+      `${data.took_ms} ms · ${data.results.length} 条 · ${data.use_index ? '走索引' : '全表扫'}`;
+    box.innerHTML = data.results.length
+      ? data.results.map(r => `
+        <div class="item">
+          <span class="score">${r.score.toFixed(4)}</span>
+          <span class="meta"> · id ${r.id}</span>
+          <div>${escapeHtml(r.text)}</div>
+          ${r.meta ? `<div class="meta">${escapeHtml(JSON.stringify(r.meta))}</div>` : ''}
+        </div>`).join('')
+      : '<div class="meta">没有结果，先点 /init 和 /insert</div>';
+    if (data.plan) {
+      planOut.style.display = 'block';
+      planOut.textContent = data.plan.join('\n');
+    } else { planOut.style.display = 'none'; }
+  } catch (e) { box.innerHTML = '<div class="meta">请求失败：' + e + '</div>'; }
+}
+
+async function loadStats() {
+  const out = document.getElementById('statsOut');
+  try {
+    const data = await (await fetch(API + '/stats')).json();
+    out.textContent = JSON.stringify(data, null, 2);
+  } catch (e) { out.textContent = '请求失败：' + e; }
+}
+
+async function doIndex(kind) {
+  const out = document.getElementById('idxOut');
+  out.textContent = '执行中（大表建 HNSW 可能要几十秒）…';
+  try {
+    const res = await fetch(API + '/index?kind=' + kind, { method: 'POST' });
+    out.textContent = JSON.stringify(await res.json(), null, 2);
+    loadStats();
+  } catch (e) { out.textContent = '请求失败：' + e; }
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+loadStats();
+</script>
+</body>
+</html>
