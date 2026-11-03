@@ -85,7 +85,7 @@ safe = html.escape(answer, quote=True)   # 先
 body = CITE_RE.sub(repl, safe)           # 后
 ```
 
-> **2026-11-04 用 `verify_cases.py` 的 [5] 实测，原句「反过来就执行了」说得不够准。**
+> **2026-11-03 用 `verify_cases.py` 的 [5] 实测，原句「反过来就执行了」说得不够准。**
 > 把顺序反过来有两种写法，失败方式完全不同：
 >
 > | 写法 | 结果 | 危害 |
