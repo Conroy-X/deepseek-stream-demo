@@ -3,7 +3,8 @@
 > 从传统 Web/前端 转向 **AI 应用开发工程师** 的完整学习工程。
 > 主路线：`LLM API → Prompt → RAG → Agent → LangGraph → MCP → AI 工程化 → 项目 → 面试`
 
-**当前进度**：Unit 1–15 全部完成（2026-10-25 逐单元实跑复核）｜下一步：Unit 16 pgvector
+**当前进度**：Unit 1–17 已学完 ✅（16 实跑复核 15/15，17 补齐真实样本与冒烟实测）｜🟡 Unit 18 学习中｜📦 Unit 19–60 材料就绪（自检全绿，待逐个学）
+**状态图例**：✅ 已学完 ｜ 🟡 进行中 ｜ 📦 材料就绪（代码可跑、自检全绿，但还没学到——自检全绿 ≠ 学完）
 **每日投入**：1–2 小时（在职节奏）
 **主力模型**：DeepSeek `deepseek-flash`（OpenAI 兼容协议）
 
@@ -39,60 +40,60 @@
 ├── unit13-llm-engineering/    # ✅ Unit 13  Timeout / Retry / Rate Limit
 ├── unit14-project1/           # ✅ Unit 14  项目 1 收口：AI Chat 完整版
 ├── unit15-embedding/          # ✅ Unit 15  Embedding + 余弦相似度 + Top-K
-├── unit16-pgvector/           # Unit 16  pgvector + HNSW / IVFFlat
+├── unit16-pgvector/           # ✅ Unit 16  pgvector + HNSW / IVFFlat
 ├── unit17-doc-parsing/        # ✅ Unit 17  PDF / MD / TXT / DOCX 文档解析
-├── unit18-chunking/           # ✅ Unit 18  固定 / 递归 / 语义切块
-├── unit19-vector-search/      # ✅ Unit 19  Top-K 向量检索与召回评测
-├── unit20-basic-rag/          # ✅ Unit 20  检索增强生成最小闭环
-├── unit21-citation/           # ✅ Unit 21  来源引用与页码定位
-├── unit22-knowledge-base/     # ✅ Unit 22  知识库上传 / 列表 / 删除
-├── unit23-doc-pipeline/       # ✅ Unit 23  文档解析切块后台流水线
-├── unit24-embedding-pipeline/ # ✅ Unit 24  批量向量化与断点续跑
-├── unit25-retriever/          # ✅ Unit 25  可配置 Retriever 模块
-├── unit26-reranker/           # ✅ Unit 26  Rerank 重排与效果对比
-├── unit27-rag-streaming/      # ✅ Unit 27  RAG Chat 流式输出
-├── unit28-citation-ui/        # ✅ Unit 28  引用高亮与原文定位 UI
-├── unit29-rag-engineering/    # ✅ Unit 29  权限 / 日志 / 成本 / 安全
-├── unit30-project2/           # ✅ Unit 30  项目 2：企业知识库 AI 交付
-├── unit31-function-calling/   # ✅ Unit 31  Function Calling 入门
-├── unit32-schema/             # ✅ Unit 32  参数 Schema
-├── unit33-tool-result/        # ✅ Unit 33  Tool Result 回填
-├── unit34-agent-loop/         # ✅ Unit 34  Agent Loop
-├── unit35-multi-tool/         # ✅ Unit 35  Multi Tool 路由
-├── unit36-agent-errors/       # ✅ Unit 36  Agent 错误处理
-├── unit37-langgraph-state/    # ✅ Unit 37  LangGraph State（TypedDict + merge）
-├── unit38-node-edge/          # ✅ Unit 38  Node / Edge（多节点 + stream）
-├── unit39-conditional-edge/   # ✅ Unit 39  Conditional Edge（条件路由）
-├── unit40-checkpoint/         # ✅ Unit 40  Checkpoint / Memory（interrupt）
-├── unit41-search-tool/        # ✅ Unit 41  Search Tool（离线 fixture）
-├── unit42-fetch-tool/         # ✅ Unit 42  Fetch Tool（HTML 清洗）
-├── unit43-extract/            # ✅ Unit 43  Extract（结构化要点提取）
-├── unit44-analysis/           # ✅ Unit 44  Analysis（多来源交叉比对）
-├── unit45-project3/           # ✅ Unit 45  项目 3 交付（Research Agent）
-├── unit46-mcp-intro/          # ✅ Unit 46  MCP 协议手写（JSON-RPC 帧）
-├── unit47-architecture/       # ✅ Unit 47  架构与传输（stdio / HTTP）
-├── unit48-capabilities/       # ✅ Unit 48  三大能力（Tools/Resources/Prompts）
-├── unit49-first-server/       # ✅ Unit 49  第一个 Server（SDK 2.x）
-├── unit50-useful-tools/       # ✅ Unit 50  自定义 Tool
-├── unit51-resource/           # ✅ Unit 51  Resource 只读数据
-├── unit52-database-tool/      # ✅ Unit 52  Database Tool（只读连接 vs 词法）
-├── unit53-agent-mcp/          # ✅ Unit 53  Agent + MCP（schema 转换）
-├── unit54-multi-mcp/          # ✅ Unit 54  多 MCP Server（前缀 + 降级）
-├── unit55-mcp-sql-mvp/        # ✅ Unit 55  项目 4 MVP（NL→SQL 端到端）
-├── unit56-nl2sql/             # ✅ Unit 56  NL→SQL（schema 注入 + 方言）
-├── unit57-sql-security/       # ✅ Unit 57  SQL 安全四道闸
-├── unit58-error-recovery/     # ✅ Unit 58  Error Recovery（错误自愈）
-├── unit59-mcp-ops/            # ✅ Unit 59  MCP 工程化（日志/超时/并发/错误码）
-├── unit60-project4/           # ✅ Unit 60  项目 4 交付（ARCHITECTURE/SECURITY/DEMO）
+├── unit18-chunking/           # 🟡 Unit 18  固定 / 递归 / 语义切块
+├── unit19-vector-search/      # 📦 Unit 19  Top-K 向量检索与召回评测
+├── unit20-basic-rag/          # 📦 Unit 20  检索增强生成最小闭环
+├── unit21-citation/           # 📦 Unit 21  来源引用与页码定位
+├── unit22-knowledge-base/     # 📦 Unit 22  知识库上传 / 列表 / 删除
+├── unit23-doc-pipeline/       # 📦 Unit 23  文档解析切块后台流水线
+├── unit24-embedding-pipeline/ # 📦 Unit 24  批量向量化与断点续跑
+├── unit25-retriever/          # 📦 Unit 25  可配置 Retriever 模块
+├── unit26-reranker/           # 📦 Unit 26  Rerank 重排与效果对比
+├── unit27-rag-streaming/      # 📦 Unit 27  RAG Chat 流式输出
+├── unit28-citation-ui/        # 📦 Unit 28  引用高亮与原文定位 UI
+├── unit29-rag-engineering/    # 📦 Unit 29  权限 / 日志 / 成本 / 安全
+├── unit30-project2/           # 📦 Unit 30  项目 2：企业知识库 AI 交付
+├── unit31-function-calling/   # 📦 Unit 31  Function Calling 入门
+├── unit32-schema/             # 📦 Unit 32  参数 Schema
+├── unit33-tool-result/        # 📦 Unit 33  Tool Result 回填
+├── unit34-agent-loop/         # 📦 Unit 34  Agent Loop
+├── unit35-multi-tool/         # 📦 Unit 35  Multi Tool 路由
+├── unit36-agent-errors/       # 📦 Unit 36  Agent 错误处理
+├── unit37-langgraph-state/    # 📦 Unit 37  LangGraph State（TypedDict + merge）
+├── unit38-node-edge/          # 📦 Unit 38  Node / Edge（多节点 + stream）
+├── unit39-conditional-edge/   # 📦 Unit 39  Conditional Edge（条件路由）
+├── unit40-checkpoint/         # 📦 Unit 40  Checkpoint / Memory（interrupt）
+├── unit41-search-tool/        # 📦 Unit 41  Search Tool（离线 fixture）
+├── unit42-fetch-tool/         # 📦 Unit 42  Fetch Tool（HTML 清洗）
+├── unit43-extract/            # 📦 Unit 43  Extract（结构化要点提取）
+├── unit44-analysis/           # 📦 Unit 44  Analysis（多来源交叉比对）
+├── unit45-project3/           # 📦 Unit 45  项目 3 交付（Research Agent）
+├── unit46-mcp-intro/          # 📦 Unit 46  MCP 协议手写（JSON-RPC 帧）
+├── unit47-architecture/       # 📦 Unit 47  架构与传输（stdio / HTTP）
+├── unit48-capabilities/       # 📦 Unit 48  三大能力（Tools/Resources/Prompts）
+├── unit49-first-server/       # 📦 Unit 49  第一个 Server（SDK 2.x）
+├── unit50-useful-tools/       # 📦 Unit 50  自定义 Tool
+├── unit51-resource/           # 📦 Unit 51  Resource 只读数据
+├── unit52-database-tool/      # 📦 Unit 52  Database Tool（只读连接 vs 词法）
+├── unit53-agent-mcp/          # 📦 Unit 53  Agent + MCP（schema 转换）
+├── unit54-multi-mcp/          # 📦 Unit 54  多 MCP Server（前缀 + 降级）
+├── unit55-mcp-sql-mvp/        # 📦 Unit 55  项目 4 MVP（NL→SQL 端到端）
+├── unit56-nl2sql/             # 📦 Unit 56  NL→SQL（schema 注入 + 方言）
+├── unit57-sql-security/       # 📦 Unit 57  SQL 安全四道闸
+├── unit58-error-recovery/     # 📦 Unit 58  Error Recovery（错误自愈）
+├── unit59-mcp-ops/            # 📦 Unit 59  MCP 工程化（日志/超时/并发/错误码）
+├── unit60-project4/           # 📦 Unit 60  项目 4 交付（ARCHITECTURE/SECURITY/DEMO）
 ├── experiments/               # 🧪 课程外的试用（Search/Fetch API、零依赖）
 └── README.md
 ```
 
-> **Unit 17–31 已按 Unit 1–16 的同一标准重做完毕。** 每个单元都是可运行实现，不是骨架：
+> **Unit 17–31 已按 Unit 1–16 的同一标准重做完毕**（32–36、37–45、46–60 同标准），全部是可运行实现，不是骨架：
 > `main.py` 末尾带离线自检（`uv run python main.py` 打印 `结果：N 通过 / 0 失败`），
 > `static/index.html` 是可操作实验台，`README.md` 走「完成标准 / 快速开始 / 自检 / 这个目录里有什么 /
 > 实测 / 接口 / 常见坑 / 验收清单 / 下一单元」，`notes.md` 里每个数字都是实跑出来的。
-> **自检全绿不等于学完**，标准是能讲清 `notes.md` 里的取舍。
+> ⚠️ **「材料就绪 ≠ 学完」**：目录树里的 📦 表示代码自检全绿但还没学到；学习进度以顶部「当前进度」为准。
 
 | 单元 | 自检条数 | 单元 | 自检条数 |
 | --- | ---: | --- | ---: |
@@ -106,6 +107,8 @@
 | 24 向量化流水线 | 67 | **合计** | **775** |
 
 > 端口约定：Unit N → `80NN`（17→8017 … 31→8031）。全部离线可跑，不需要 API key。
+> Unit 16 实测备忘（2026-11-03）：5 万行 / 512 维 / top10，全表扫 260ms → HNSW 0.98ms（**266×**）；
+> 坑：`ef_search` 拉太大 planner 会弃索引退回 Seq Scan——**建了索引 ≠ 用上索引，必须 EXPLAIN 确认**。
 
 > 四个 project 不再单独建目录：项目 1 收在 `unit14-project1/`，
 > 项目 2（企业知识库 RAG）由 Unit 15–30 逐单元累积而成。
@@ -206,9 +209,9 @@ bash 00-setup/healthcheck.sh -v       # 顺带打印失败项的完整输出
 | 阶段 | 天数 | 主题 | 状态 | 产出 |
 | --- | --- | --- | --- | --- |
 | 一 | Unit 3–14 | LLM API + Prompt + 全栈 Chat | ✅ 完成（2026-10-25 复核） | AI Chat 完整版 |
-| 二 | Unit 15–30 | Embedding / pgvector / RAG | 🟡 进行中（15 / 30） | 企业知识库 AI |
-| 三 | Unit 31–45 | Function Calling / LangGraph | ⬜ | Research Agent |
-| 四 | Unit 46–60 | MCP | ⬜ | MCP 数据库 Agent |
+| 二 | Unit 15–30 | Embedding / pgvector / RAG | 🟡 进行中（学到 Unit 18，材料已备到 30） | 企业知识库 AI |
+| 三 | Unit 31–45 | Function Calling / LangGraph | 📦 材料就绪 | Research Agent |
+| 四 | Unit 46–60 | MCP | 📦 材料就绪（846 条自检全绿） | MCP 数据库 Agent |
 | 五 | Unit 61–75 | AI 工程化 + LLM 原理 | ⬜ | 容器化 + 评测 |
 | 六 | Unit 76–90 | 项目打磨 + 简历 + 面试 | ⬜ | 3 个仓库 + 简历 |
 
