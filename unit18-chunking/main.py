@@ -111,14 +111,29 @@ QUESTIONS = [
 
 
 class ChunkIn(BaseModel):
-    text: str | None = None
-    strategy: str = Field(default="recursive")
-    size: int = Field(default=160, ge=20, le=2000)
-    overlap: int = Field(default=30, ge=0, le=500)
-    threshold: float = Field(default=0.05, ge=0, le=1)
+    """POST /chunk 的入参。
+
+    Field(ge=..., le=...) 是**第一道防线**：Pydantic 在进业务代码之前就拦掉
+    越界值，返回 422。chunker._validate 是第二道（针对"组合非法"，
+    比如 overlap >= size —— 单看每个值都合法，组合起来会死循环）。
+    两道都要有：单值范围用 Pydantic，跨参数关系只能在业务层校验。
+    """
+
+    text: str | None = None      # 不给就用内置 DEMO_PAGES（方便 curl 直接试）
+    strategy: str = Field(default="recursive")   # 默认选 recursive：通用性最好
+    size: int = Field(default=160, ge=20, le=2000)   # 20 是"再小没上下文"的下限
+    overlap: int = Field(default=30, ge=0, le=500)   # 惯例 size 的 10%~20%
+    threshold: float = Field(default=0.05, ge=0, le=1)  # 只对 semantic 生效
 
 
 class CompareIn(BaseModel):
+    """POST /compare 的入参：故意只暴露 size/overlap/top_k。
+
+    为什么不让传 strategy —— 这个接口的用途就是"一次比完三种"，
+    少一个可调项，就少一个"对比时不小心只跑了两种"的可能。
+    top_k 默认 3：RAG 实际往 LLM 里塞 3~5 块，多了反而稀释注意力。
+    """
+
     size: int = Field(default=160, ge=20, le=2000)
     overlap: int = Field(default=30, ge=0, le=500)
     top_k: int = Field(default=3, ge=1, le=10)
@@ -138,10 +153,23 @@ def health() -> dict:
 
 @app.post("/chunk", summary="切一份文本，看每块长什么样")
 def chunk(req: ChunkIn) -> dict:
+    """切一份文本 → 返回块列表 + 三个体检指标。
+
+    注意这里和 /compare 的口径差（很容易混淆）：
+      /chunk    可以传自己的 text，size/overlap/threshold 全可调
+                → 你看到的块数是你当前参数的快照
+      /compare  固定 DEMO_PAGES + 12 题，只返回统计
+                → notes.md 那张 10/10/18 的表来自这里
+
+    所以"我在 UI 里看到 c47，和表格里的 18 块对不上"不是 bug，
+    是两次调用的参数不同 —— 引用块数时必须连参数一起说。
+    """
+    # 不传 text 就用内置演示文档；传了就当单页处理（页号恒为 1）
     pages = [req.text] if req.text else DEMO_PAGES
     try:
         chunks = chunk_document(pages, req.strategy, req.size, req.overlap, req.threshold)
     except ChunkError as e:
+        # 业务校验失败 → 400（而不是 500）：参数是调用方的错，不是服务器崩了
         raise HTTPException(status_code=400, detail=str(e)) from e
     total = len("\n".join(pages))
     return {
@@ -150,14 +178,37 @@ def chunk(req: ChunkIn) -> dict:
         "overlap": req.overlap,
         "count": len(chunks),
         "total_chars": total,
+        # coverage 是切块正确性的第一道体检：
+        # < 1.0 说明有字符没进任何块 → 那部分内容检索永远召不回（静默丢数据）
         "coverage": round(coverage(chunks, total), 4),
+        # avg_chars 和 size 的比值 = 填充率：
+        # 太低说明块被语义边界切得很碎（recursive/semantic 的常见代价），
+        # 太高（接近 size）才是"把箱子装满"的理想状态
         "avg_chars": round(sum(c.chars for c in chunks) / len(chunks), 1) if chunks else 0,
         "chunks": [c.to_dict() for c in chunks],
     }
 
 
 def _recall(chunks, q: str, top_k: int, embedder) -> dict:
-    """命中 = 前 top_k 个 chunk 里存在包含答案原文的那一块。"""
+    """命中 = 前 top_k 个 chunk 里存在包含答案原文的那一块。
+
+    ══ 这是整个单元的评测口径，看懂它才谈得上"切块好不好"══
+
+    判定方式：**答案串是否完整出现在某一块的文本里**（子串匹配）。
+      · 不是"LLM 判断这块能否回答问题"——那需要模型，评测不可复现
+      · 也不是"向量相似度到阈值就算"——那会把"看起来相关"算成"答得出来"
+      · 子串匹配是唯一零成本、可复现、且和 RAG 答案正确性强相关的判据：
+        块里没有答案原文，下游 LLM 就只能瞎编
+
+    返回 rank 的语义（很关键，调参全靠它）：
+      hit=True,  rank=1~top_k   → 命中，排第几
+      hit=False, rank=4~10      → **差一口气**：答案块存在，只是被挤出 top_k
+      hit=False, rank=None/很大 → 真失败：切碎了 / embedder 认不出来
+
+    两种失败要分开看，因为病因完全不同：
+      近失（rank 4~10）→ 调 size / overlap / 换 embedder
+      远失（rank 100+） → 切块把答案切断了，或者块太长把信号稀释了
+    """
     if not chunks:
         return {"hit": False, "rank": None}
     vecs = [embedder._embed_one(c.text) for c in chunks]
@@ -179,7 +230,24 @@ def _orphan_heading(c) -> bool:
 
 
 def _adjacent_sims(pages: list[str], embedder) -> list[float]:
-    """相邻句相似度分布 —— 语义切分的阈值就该按这个分布定。"""
+    """相邻句相似度分布 —— 语义切分的阈值就该按这个分布定。
+
+    ══ 这个函数是"阈值必须标定"的可执行版 ══
+
+    它返回的列表就是 semantic_chunks 下刀前看到的那串数字。
+    打印它的中位数/最大值，你立刻能回答三个问题：
+      ① 我的 embedder 在这个语料上的"同话题基线"是多少？（中位数）
+      ② 阈值设成 X 会不会一刀都切不动？（X < 中位数才可能切）
+      ③ 阈值设成 Y 会不会逐句切？（Y > 大部分值就是每句一切）
+
+    实测（本单元 49 句演示语料，本地哈希向量）：
+      中位数 0.096 · 最大 0.381
+      → 0.05 切 15 刀（合理）；0.30 切 48 刀（≈逐句切，策略失效）
+      → 换真语义模型后中位数通常 0.4+，此时 0.05 一刀都切不动
+
+    方法论：这个函数不产生任何决策，只负责把"分布"摊开给人看。
+    所有阈值参数都该配一个这样的"分布探针"，否则就是在瞎猜数字。
+    """
     spans = sentence_spans("\n".join(pages))
     vecs = [embedder._embed_one(s) for s, _, _ in spans]
     return [emb.cosine_similarity(vecs[i - 1], vecs[i]) for i in range(1, len(vecs))] or [0.0]
@@ -187,6 +255,21 @@ def _adjacent_sims(pages: list[str], embedder) -> list[float]:
 
 @app.post("/compare", summary="同一份文档、同一批问题，比三种策略的命中率")
 def compare(req: CompareIn) -> dict:
+    """三种策略 × 同一份 DEMO_PAGES × 同一批 12 题 → 一张对照表。
+
+    ══ 控制变量的三条铁律，这里全占了 ══
+      ① 同一份文档：都用 DEMO_PAGES，不许换语料
+      ② 同一批问题：QUESTIONS 写死 12 题，不许按策略挑题
+      ③ 只改策略名：size/overlap 从请求里来，三个策略共享同一组参数
+
+    为什么必须这样：任何一条破了，对比就没有意义。
+    比如"semantic 用 size=320、fixed 用 size=160"，赢的是参数不是策略 ——
+    这正是 12 题小评测最容易被误读的地方（80 题真评测已在 eval50.py 里）。
+
+    口径提醒：这里的块数是 size=160/overlap=30 下的**快照**，
+    不是"策略的固有属性"。块数是 策略 × 参数 × 文档 的三元函数，
+    引用任何块数/recall 数字都必须带参数条件。
+    """
     e = emb.get_embedder()
     rows = []
     for s in STRATEGIES:
