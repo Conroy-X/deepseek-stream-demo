@@ -1,0 +1,12 @@
+[project]
+name = "unit71-token"
+version = "0.1.0"
+description = "Unit 71：Token 原理（手写 BPE 分词 + 编解码 + 计费）"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi[standard]>=0.115",
+    "uvicorn[standard]>=0.30",
+]
+
+[tool.uv]
+package = false
