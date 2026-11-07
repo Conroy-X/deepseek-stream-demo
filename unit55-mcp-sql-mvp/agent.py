@@ -273,7 +273,7 @@ def build_agent(today: str = "2026-11-01") -> tuple[Agent, SchemaMap, int]:
     return Agent(model, prompt), schema, calls
 
 
-def chat_api(messages: list[dict], model: str = "deepseek-chat") -> dict:
+def chat_api(messages: list[dict], model: str = "deepseek-flash") -> dict:
     """真的调一次 DeepSeek。只在设了 DEEPSEEK_API_KEY 时可用 —— 自检绝不走这条路。"""
     import httpx
 

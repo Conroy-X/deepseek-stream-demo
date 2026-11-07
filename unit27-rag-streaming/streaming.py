@@ -233,9 +233,9 @@ async def llm_text_stream(question: str, citations: list[Citation]) -> AsyncIter
     """流式读 OpenAI 兼容的 /chat/completions。没有 key 时不会被调用。"""
     import httpx
 
-    base = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1").rstrip("/")
+    base = os.getenv("OPENAI_BASE_URL", "https://api.deepseek.com").rstrip("/")
     key = os.getenv("OPENAI_API_KEY", "").strip()
-    model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+    model = os.getenv("OPENAI_MODEL", "deepseek-flash")
     if not key:
         raise StreamError("没有 OPENAI_API_KEY，请用 extractive 后端")
 

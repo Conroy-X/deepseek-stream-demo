@@ -185,7 +185,7 @@ def chat_api(messages: list[dict]) -> dict:
             f"{base}/chat/completions",
             headers={"Authorization": f"Bearer {key}"},
             json={
-                "model": os.getenv("OPENAI_MODEL", "deepseek-chat"),
+                "model": os.getenv("OPENAI_MODEL", "deepseek-flash"),
                 "messages": [strip_local_fields(m) for m in messages],
                 "tools": TOOLS,
                 "tool_choice": "auto",

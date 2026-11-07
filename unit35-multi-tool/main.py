@@ -216,7 +216,7 @@ def chat_api(messages: list[dict], tools: list[dict]) -> dict:
         r = c.post(
             f"{base}/chat/completions",
             headers={"Authorization": f"Bearer {key}"},
-            json={"model": os.getenv("OPENAI_MODEL", "deepseek-chat"), "messages": messages, "tools": tools, "tool_choice": "auto"},
+            json={"model": os.getenv("OPENAI_MODEL", "deepseek-flash"), "messages": messages, "tools": tools, "tool_choice": "auto"},
         )
         r.raise_for_status()
         return r.json()["choices"][0]["message"]

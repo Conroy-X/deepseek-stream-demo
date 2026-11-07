@@ -259,7 +259,7 @@ def build_agent(mode: str = "relevant", today: str = "2026-11-01") -> tuple[Agen
     return Agent(OfflineModel(smap, today=today), smap, mode=mode), smap, calls
 
 
-def chat_api(messages: list[dict], model: str = "deepseek-chat") -> dict:
+def chat_api(messages: list[dict], model: str = "deepseek-flash") -> dict:
     """真调 DeepSeek，被环境变量挡着；自检绝不走这条路。"""
     import httpx
 
