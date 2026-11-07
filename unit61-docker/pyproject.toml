@@ -1,0 +1,13 @@
+[project]
+name = "unit61-docker"
+version = "0.1.0"
+description = "Unit 61：Docker 容器化（FastAPI 服务 + 静态校验容器产物）"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi[standard]>=0.115",
+    "uvicorn[standard]>=0.30",
+    "pyyaml>=6.0",
+]
+
+[tool.uv]
+package = false

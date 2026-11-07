@@ -1,0 +1,23 @@
+# 密钥与本地配置：进镜像就是泄露
+.env
+.env.*
+!.env.example
+
+# 虚拟环境与依赖产物：几百 MB，绝不能 COPY 进镜像
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+
+# 运行产物
+logs/
+*.db
+*.sqlite3
+*.log
+
+# 版本控制与编辑器
+.git/
+.gitignore
+.vscode/
+.idea/
+.DS_Store
