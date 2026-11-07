@@ -84,7 +84,7 @@ deepseek-v4-pro  = DeepSeek-V4-Pro       context 1,048,576   max_output 393,216
 1. `notes.md` 的「今天做了什么」是空的
 2. `notes.md` 报错表格第 2 行格式错位（那条其实是自我反思，不是报错），建议移到「今天学到的」里
 3. `~/ai-journey/.python-version` 写的是 `3.14`，实际 venv 是 3.13.5 → Unit 4 建新环境时要么改成 `3.13`，要么显式 `--python /usr/bin/python3`
-4. `~/projects/deepseek-stream-demo` 是第二份副本（内容已同步），建议只保留 `~/ai-journey` 一份，避免以后改错地方
+4. `~/projects/ai-journey` 是第二份副本（内容已同步），建议只保留 `~/ai-journey` 一份，避免以后改错地方
 
 ---
 

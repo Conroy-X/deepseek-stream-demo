@@ -118,10 +118,10 @@
 
 | 仓库 | 内容 | 状态 |
 | --- | --- | --- |
-| [Conroy-X/deepseek-stream-demo](https://github.com/Conroy-X/deepseek-stream-demo) | 本工程全部代码：`unit01-fastapi/` ~ `unit60-project4/` 六十个学习单元 + 根目录流式 Demo（`main.py`）+ 学习文档（`docs/`） | ✅ 已同步 |
+| [Conroy-X/ai-journey](https://github.com/Conroy-X/ai-journey) | 本工程全部代码：`unit01-fastapi/` ~ `unit60-project4/` 六十个学习单元 + 根目录流式 Demo（`main.py`）+ 学习文档（`docs/`） | ✅ 已同步 |
 
-> **`~/ai-journey` 就是本仓库的工作副本**（git 仓库根目录即此处），远端是 `git@github.com:Conroy-X/deepseek-stream-demo.git`。
-> 推送走 **SSH**（`ssh -T git@github.com` 已验证为 `Conroy-X`）；`~/projects/deepseek-stream-demo` 是早期克隆，已与远端同步。
+> **`~/ai-journey` 就是本仓库的工作副本**（git 仓库根目录即此处），远端是 `git@github.com:Conroy-X/ai-journey.git`。
+> 推送走 **SSH**（`ssh -T git@github.com` 已验证为 `Conroy-X`）；`~/ai-journey` 是唯一工作副本。
 
 ---
 
