@@ -25,7 +25,7 @@ uv sync
 uv run python main.py
 ```
 
-26 项静态校验：Dockerfile 语法、非 root、层缓存顺序、.dockerignore 排除项、
+27 项静态校验：Dockerfile 语法、非 root、层缓存顺序、.dockerignore 排除项、
 compose 端口一致性、健康检查声明、密钥不进镜像。
 
 ### 2. 真机构建 + 起容器（需要 Docker，本机已装）
@@ -74,7 +74,7 @@ docker compose down
 
 ## 五、完成标准
 
-- [ ] `uv run python main.py` → 26 通过 / 0 失败
+- [ ] `uv run python main.py` → 27 通过 / 0 失败
 - [ ] `docker compose up --build -d` 后 `/health` 返回 200
 - [ ] `docker compose ps` 显示 healthy
 - [ ] 能说出「为什么先 COPY requirements 再 pip install」

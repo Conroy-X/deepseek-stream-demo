@@ -69,7 +69,7 @@ key = sha256(model + messages + temperature)
 
 | 文件 | 作用 |
 | --- | --- |
-| `cache.py` | 缓存抽象 + 双后端 + 会话存取 + 独立自检（约 30 项） |
+| `cache.py` | 缓存抽象 + 双后端 + 会话存取 + 独立自检（26 项） |
 | `main.py` | FastAPI：/ask（假模型+缓存）/stats/clear |
 | `requirements.txt` / `pyproject.toml` | 依赖（redis 包） |
 
