@@ -1,0 +1,12 @@
+[project]
+name = "unit84-memory-hitl"
+version = "0.1.0"
+description = "Unit 84：Memory/HITL（记忆+人工审批）"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi[standard]>=0.115",
+    "uvicorn[standard]>=0.30",
+]
+
+[tool.uv]
+package = false

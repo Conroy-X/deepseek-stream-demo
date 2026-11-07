@@ -1,0 +1,12 @@
+[project]
+name = "unit80-project1-final"
+version = "0.1.0"
+description = "Unit 80：项目1最终版（工程化接线收口）"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi[standard]>=0.115",
+    "uvicorn[standard]>=0.30",
+]
+
+[tool.uv]
+package = false
