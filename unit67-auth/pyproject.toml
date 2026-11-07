@@ -1,0 +1,12 @@
+[project]
+name = "unit67-auth"
+version = "0.1.0"
+description = "Unit 67：Auth（认证 vs 授权、401 vs 403、手写 HMAC JWT、RBAC）"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi[standard]>=0.115",
+    "uvicorn[standard]>=0.30",
+]
+
+[tool.uv]
+package = false
