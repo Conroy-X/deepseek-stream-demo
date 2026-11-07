@@ -103,18 +103,18 @@
 ├── unit76-rag-hybrid/        # 📦 Unit 76  混合检索（BM25+向量+RRF）
 ├── unit77-reranker/          # 📦 Unit 77  检索后重排
 ├── unit78-rag-eval/          # 📦 Unit 78  RAG 评测收口
-├── unit79-engineering-polish/   # 📦 Unit 79  RAG 工程化（配置化）
-├── unit80-project2-final/    # 📦 Unit 80  项目1最终版（横切接线）
-├── unit81-agent-optimize/    # 📦 Unit 81  Agent 优化
-├── unit82-langgraph/         # 📦 Unit 82  LangGraph 整合
-├── unit83-mcp/               # 📦 Unit 83  MCP 整合
-├── unit84-memory-hitl/       # 📦 Unit 84  Memory/HITL
-├── unit85-resume/            # 📦 Unit 85  简历（校验器）
-├── unit86-github/            # 📦 Unit 86  GitHub 整理
-├── unit87-interview-llm/     # 📦 Unit 87  面试 LLM+RAG
-├── unit88-interview-agent/   # 📦 Unit 88  面试 Agent+MCP
-├── unit89-interview-eng/     # 📦 Unit 89  面试 AI 工程化
-└── unit90-job-hunt/          # 📦 Unit 90  求职投递（跟踪器）
+├── unit79-engineering-polish/ # 📦 Unit 79  工程化收尾（权限/日志/错误页/成本面板）
+├── unit80-project2-final/     # 📦 Unit 80  项目 2 最终版（企业知识库 + UI + Demo）
+├── unit81-agent-optimize/     # 📦 Unit 81  Research Agent 优化（引用/去重/报告）
+├── unit82-langgraph/          # 📦 Unit 82  LangGraph 优化（子图/并行/流式）
+├── unit83-mcp/                # 📦 Unit 83  MCP 集成（挂进 Research Agent）
+├── unit84-memory-hitl/        # 📦 Unit 84  Memory / HITL（记忆 + 人工审批）
+├── unit85-resume/             # 📦 Unit 85  简历校验器（PII/动词/量化）
+├── unit86-github/             # 📦 Unit 86  GitHub 卫生检查
+├── unit87-interview-llm/      # 📦 Unit 87  面试 LLM+RAG（30 题）
+├── unit88-interview-agent/    # 📦 Unit 88  面试 Agent+MCP（30 题）
+├── unit89-interview-eng/      # 📦 Unit 89  面试 AI 工程化（30 题）
+└── unit90-job-hunt/           # 📦 Unit 90  求职投递（漏斗跟踪）
 ├── experiments/               # 🧪 课程外的试用（Search/Fetch API、零依赖）
 └── README.md
 ```
