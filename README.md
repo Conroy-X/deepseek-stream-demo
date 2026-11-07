@@ -103,8 +103,8 @@
 ├── unit76-rag-hybrid/        # 📦 Unit 76  混合检索（BM25+向量+RRF）
 ├── unit77-reranker/          # 📦 Unit 77  检索后重排
 ├── unit78-rag-eval/          # 📦 Unit 78  RAG 评测收口
-├── unit79-rag-engineering/   # 📦 Unit 79  RAG 工程化（配置化）
-├── unit80-project1-final/    # 📦 Unit 80  项目1最终版（横切接线）
+├── unit79-engineering-polish/   # 📦 Unit 79  RAG 工程化（配置化）
+├── unit80-project2-final/    # 📦 Unit 80  项目1最终版（横切接线）
 ├── unit81-agent-optimize/    # 📦 Unit 81  Agent 优化
 ├── unit82-langgraph/         # 📦 Unit 82  LangGraph 整合
 ├── unit83-mcp/               # 📦 Unit 83  MCP 整合
