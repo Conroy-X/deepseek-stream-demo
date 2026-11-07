@@ -1,0 +1,12 @@
+[project]
+name = "unit73-transformer"
+version = "0.1.0"
+description = "Unit 73：Transformer 架构（位置编码 + 残差 + LayerNorm + FFN）"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi[standard]>=0.115",
+    "uvicorn[standard]>=0.30",
+]
+
+[tool.uv]
+package = false

@@ -1,0 +1,12 @@
+[project]
+name = "unit74-attention"
+version = "0.1.0"
+description = "Unit 74：Attention（Q/K/V + 缩放点积 + 因果 mask）"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi[standard]>=0.115",
+    "uvicorn[standard]>=0.30",
+]
+
+[tool.uv]
+package = false
