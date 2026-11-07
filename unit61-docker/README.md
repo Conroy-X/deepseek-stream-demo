@@ -30,10 +30,18 @@ compose 端口一致性、健康检查声明、密钥不进镜像。
 
 ### 2. 真机构建 + 起容器（需要 Docker，本机已装）
 
-> ⚠️ 本机网络约束（2026-11-07 实测）：`docker compose build` 拉 `python:3.13-slim`
-> 的层被限速到约 26KB/s（29.86MB 单层需 ~20 分钟）。这是**宿主网络限速**，不是
-> Dockerfile 的问题 —— 离线静态自检已把构建产物逐条校验过。换网络正常的机器，
-> 以下步骤可正常执行。
+```bash
+docker compose up --build -d
+curl http://127.0.0.1:8061/health
+docker compose ps          # 看 STATUS 列是否 healthy
+docker compose down
+```
+
+> 本机实测（2026-11-07）：`docker compose up --build -d` 全程 **76 秒**，
+> 容器 7 秒 healthy，`/health` 返回 200。
+> 两个网络前提（本机已配好，换机器要重配）：
+> 1. Docker daemon 走宿主代理 `http://172.19.64.1:7897`（拉基础镜像快）
+> 2. Dockerfile 里 pip install 用 USTC 镜像（否则容器内 pip 直连 PyPI 极慢）
 
 ```bash
 docker compose up --build -d
@@ -52,6 +60,7 @@ docker compose down
 | 4 | .dockerignore 漏掉 .env | **密钥进镜像**，`docker history` 都能挖出来 | .env / .venv / logs 必须排除 |
 | 5 | 没有 HEALTHCHECK | 坏实例不会被自动发现 | 显式 HEALTHCHECK / compose healthcheck |
 | 6 | EXPOSE 与 compose 端口对不上 | 容器起得来，外面连不上 | 两者一致 |
+| 7 | 容器内 pip 直连 PyPI | 构建卡在 pip install（国内直连极慢） | pip install 加 `-i USTC 镜像` |
 
 ## 四、文件说明
 

@@ -33,7 +33,10 @@ COPY main.py ./            # 3. 再复制源码
 
 | 报错 | 原因 | 怎么解决 |
 | ---- | ---- | -------- |
-| docker build 拉层卡住（~26KB/s） | 本机 release 下载被限速（记忆里已记录） | 离线静态自检为准；换网络正常的机器构建，或提前 `docker pull python:3.13-slim` |
+| docker build 拉基础镜像卡住 | Docker daemon 没走代理 | 配 `/etc/systemd/system/docker.service.d/http-proxy.conf` 指向宿主 7897 |
+| docker build 卡在 pip install | 容器内 pip 直连 PyPI 极慢 | Dockerfile 里 pip install 加 `-i https://mirrors.ustc.edu.cn/pypi/simple` |
+
+配完后实测：build 76 秒、容器 7 秒 healthy、/health 200。
 
 ## 我自己的话解释「为什么密钥不能 COPY 进镜像」
 

@@ -10,7 +10,8 @@ WORKDIR /app
 
 # 先复制依赖清单再安装：源码改动不会让 pip install 这层缓存失效
 COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+# PyPI 走 USTC 镜像：本机直连 PyPI 慢（项目约定同款）
+RUN pip install --no-cache-dir -i https://mirrors.ustc.edu.cn/pypi/simple -r requirements.txt
 
 # 再复制应用代码
 COPY main.py ./
