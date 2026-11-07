@@ -1,3 +1,4 @@
 fastapi[standard]>=0.115
 uvicorn[standard]>=0.30
 pyyaml>=6.0
+psycopg[binary]>=3.2

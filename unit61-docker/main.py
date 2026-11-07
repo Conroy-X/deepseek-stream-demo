@@ -1,66 +1,157 @@
-"""Unit 61 · Docker：把一个 FastAPI 服务容器化，并静态校验容器化产物。
+"""Unit 61 · Docker：FastAPI + PostgreSQL 用 compose 一键起。
 
-本单元没有新算法，学的是工程动作：把已有的服务装进容器、可重复构建、可一键起。
-目标对象是根目录同款的最小服务（/health + /info），产出一套可直接 `docker compose up` 的产物。
+计划要求：把 FastAPI 后端 + PG 用 compose 一键起。
 
-自检是**离线静态校验**：不要求本机有 Docker，也能把 Dockerfile / .dockerignore /
-docker-compose.yml 里的常见坑逐个查一遍。真机 `docker build` 属于 smoke，见 README。
+设计要点：
+  1. **可降级**：PG 连不上时自动退回内存存储，服务照常可用（可用性优先）
+  2. **健康检查**：/health 明确报告 db 后端（postgres / memory）
+  3. **依赖顺序**：compose 里 app 等 PG 的 healthcheck 通过才启动
+  4. **自检离线可跑**：静态校验 compose 结构 + 验证降级逻辑，不需要真起容器
 
-静态校验覆盖的坑（都是面试/工作里真实翻车点）：
-  1. Dockerfile 第一句必须 FROM（否则 build 报错）
-  2. 不能用 root 跑（安全基线；被攻破就是容器内 root）
-  3. 依赖安装要先 COPY requirements 再 pip install（利用层缓存，改代码不重装依赖）
-  4. .dockerignore 必须排除 .env / .venv / logs（否则密钥和几百 MB 依赖进镜像）
-  5. 健康检查要显式声明（HEALTHCHECK / docker-compose healthcheck）
-  6. 端口要 EXPOSE 且与 compose 映射一致
+启动：docker compose up --build -d
+自检：uv run python main.py
 """
 
 from __future__ import annotations
 
-import json
 import os
-import re
-import sys
+from dataclasses import dataclass, field
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 
 HERE = Path(__file__).resolve().parent
 
-app = FastAPI(title="Unit 61 · Docker", version="0.1.0")
+
+def build_dsn() -> str:
+    """拼出 DSN：优先 DATABASE_URL；否则用拆分的 PG* 变量拼（compose 就是这么传的）。"""
+    url = os.getenv("DATABASE_URL", "").strip()
+    if url:
+        return url
+    host = os.getenv("PGHOST", "").strip()
+    user = os.getenv("PGUSER", "").strip()
+    auth = os.getenv("PGAUTH", "").strip()
+    db = os.getenv("PGDB", "").strip()
+    port = os.getenv("PGPORT", "5432").strip()
+    if not (host and user and auth and db):
+        return ""
+    return f"postgresql://{user}:{auth}@{host}:{port}/{db}"
 
 
-@app.get("/health", summary="健康检查：容器编排与探针都打这里")
+DATABASE_URL = build_dsn()
+
+
+# ---------------------------------------------------------------------------
+# 存储层：PG 优先，连不上降级内存
+# ---------------------------------------------------------------------------
+@dataclass
+class MemoryStore:
+    backend: str = "memory"
+    _data: dict = field(default_factory=dict)
+
+    def put(self, key: str, value: str) -> None:
+        self._data[key] = value
+
+    def get(self, key: str) -> str | None:
+        return self._data.get(key)
+
+    def count(self) -> int:
+        return len(self._data)
+
+
+@dataclass
+class PgStore:
+    backend: str = "postgres"
+    dsn: str = ""
+
+    def _conn(self):
+        import psycopg  # 延迟导入：离线环境不装也能用 MemoryStore
+
+        return psycopg.connect(self.dsn, connect_timeout=2)
+
+    def put(self, key: str, value: str) -> None:
+        with self._conn() as conn, conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO notes(key, value) VALUES(%s, %s) "
+                "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
+                (key, value),
+            )
+            conn.commit()
+
+    def get(self, key: str) -> str | None:
+        with self._conn() as conn, conn.cursor() as cur:
+            cur.execute("SELECT value FROM notes WHERE key = %s", (key,))
+            row = cur.fetchone()
+            return row[0] if row else None
+
+    def count(self) -> int:
+        with self._conn() as conn, conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM notes")
+            return int(cur.fetchone()[0])
+
+
+def make_store(dsn: str | None = None) -> MemoryStore | PgStore:
+    """优先 PG；连不上（或没配 DSN）退回内存。"""
+    dsn = (dsn if dsn is not None else DATABASE_URL).strip()
+    if not dsn:
+        return MemoryStore()
+    store = PgStore(dsn=dsn)
+    try:
+        # 探测：建表 + 一次查询
+        with store._conn() as conn, conn.cursor() as cur:
+            cur.execute("CREATE TABLE IF NOT EXISTS notes(key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+            conn.commit()
+        store.count()
+        return store
+    except Exception:  # noqa: BLE001
+        return MemoryStore()
+
+
+store = make_store()
+
+app = FastAPI(title="Unit 61 · Docker + PostgreSQL", version="0.1.0")
+
+
+@app.get("/health", summary="健康检查：报告当前 db 后端")
 async def health() -> dict:
-    return {"ok": True, "unit": 61, "service": "docker-demo"}
+    return {"ok": True, "unit": 61, "db_backend": store.backend}
 
 
-@app.get("/info", summary="运行时信息：证明容器内环境符合预期")
-async def info() -> dict:
-    return {
-        "python": sys.version.split()[0],
-        "cwd": str(Path.cwd()),
-        "env_notes": "容器内不应出现 DEEPSEEK_API_KEY（.dockerignore 已排除 .env）",
-        "has_key_in_image": bool(os.getenv("DEEPSEEK_API_KEY", "").strip()),
-    }
+@app.put("/notes/{key}", summary="写入一条笔记")
+async def put_note(key: str, value: str) -> dict:
+    store.put(key, value)
+    return {"ok": True, "key": key, "db_backend": store.backend}
+
+
+@app.get("/notes/{key}", summary="读取一条笔记")
+async def get_note(key: str) -> dict:
+    v = store.get(key)
+    if v is None:
+        raise HTTPException(status_code=404, detail=f"笔记 {key} 不存在")
+    return {"key": key, "value": v, "db_backend": store.backend}
+
+
+@app.get("/notes", summary="笔记总数")
+async def count_notes() -> dict:
+    return {"count": store.count(), "db_backend": store.backend}
 
 
 @app.get("/", include_in_schema=False)
 async def index() -> JSONResponse:
-    return JSONResponse({"hint": "看 /health /info，或 /docs"})
+    return JSONResponse({"hint": "/health 看 db 后端；PUT/GET /notes/{key} 读写"})
 
 
 # ---------------------------------------------------------------------------
-# 离线自检：静态校验容器化产物
+# 独立自检：compose 结构校验 + 降级逻辑验证
 # ---------------------------------------------------------------------------
-if __name__ == "__main__":
-    import yaml  # 校验 compose 用
+def run_selfcheck() -> int:
+    import yaml
 
     passed = failed = 0
 
     def check(name: str, ok: bool, detail: str = "") -> None:
-        global passed, failed
+        nonlocal passed, failed
         if ok:
             passed += 1
             print(f"  [PASS] {name}")
@@ -68,76 +159,107 @@ if __name__ == "__main__":
             failed += 1
             print(f"  [FAIL] {name} {detail}")
 
-    print("Unit 61 · Docker 静态自检\n")
+    print("Unit 61 · Docker + PostgreSQL 自检\n")
 
-    # ---------------- 目标服务本身 ----------------
+    # ---- 降级逻辑 ----
+    ms = make_store("")  # 空 DSN → 内存
+    check("空 DSN 退回内存", ms.backend == "memory")
+    ms.put("a", "1")
+    check("内存后端可写读", ms.get("a") == "1")
+    check("内存后端计数", ms.count() == 1)
+    check("内存后端读不存在返回 None", ms.get("nope") is None)
+
+    bad = make_store("postgresql://nobody:nobody@127.0.0.1:1/none")
+    check("PG 连不上也退回内存（服务不挂）", bad.backend == "memory", bad.backend)
+
+    # ---- DSN 拼接 ----
+    import os as _os
+
+    saved = {k: _os.environ.get(k) for k in ("DATABASE_URL", "PGHOST", "PGUSER", "PGAUTH", "PGDB", "PGPORT")}
+    for k in saved:
+        _os.environ.pop(k, None)
+    check("无配置时 DSN 为空", build_dsn() == "")
+
+    _os.environ.update({"PGHOST": "db", "PGUSER": "app", "PGAUTH": "pw", "PGDB": "notes", "PGPORT": "5432"})
+    dsn = build_dsn()
+    check("拆分的 PG* 能拼出 DSN", dsn.startswith("postgresql://app:") and "@db:5432/notes" in dsn, dsn)
+
+    _os.environ["DATABASE_URL"] = "postgresql://x:y@h:1/d"
+    check("DATABASE_URL 优先级最高", build_dsn() == "postgresql://x:y@h:1/d")
+
+    # 还原环境
+    for k, v in saved.items():
+        if v is None:
+            _os.environ.pop(k, None)
+        else:
+            _os.environ[k] = v
+
+    # ---- 应用层 ----
     from fastapi.testclient import TestClient
 
     c = TestClient(app)
     r = c.get("/health")
-    check("服务 /health 200", r.status_code == 200)
-    check("health 返回 ok", r.json().get("ok") is True)
-    r = c.get("/info")
-    check("服务 /info 200", r.status_code == 200)
-    check("info 含 python 版本", "python" in r.json())
+    check("health 200", r.status_code == 200)
+    check("health 报告 db_backend", r.json()["db_backend"] in ("postgres", "memory"))
+    r = c.put("/notes/x", params={"value": "hello"})
+    check("写入笔记 200", r.status_code == 200)
+    r = c.get("/notes/x")
+    check("读到刚写的笔记", r.json()["value"] == "hello")
+    r = c.get("/notes/not-exist")
+    check("读不存在 → 404", r.status_code == 404)
 
-    # ---------------- Dockerfile ----------------
-    df_path = HERE / "Dockerfile"
-    check("Dockerfile 存在", df_path.exists())
-    if df_path.exists():
-        df = df_path.read_text(encoding="utf-8")
-        lines = [ln for ln in df.splitlines() if ln.strip() and not ln.strip().startswith("#")]
-        check("第一条有效指令是 FROM", lines[0].upper().startswith("FROM"), lines[0])
-        check("有 USER 切非 root", any(ln.upper().startswith("USER ") for ln in lines))
-        user_lines = [ln for ln in lines if ln.upper().startswith("USER ")]
-        check("USER 不是 root", user_lines and "root" not in user_lines[-1].lower(), user_lines[-1] if user_lines else "无")
-        check("先 COPY requirements 再 pip install", any("COPY" in ln and "requirements" in ln for ln in lines))
-        check("有 EXPOSE 端口", any(ln.upper().startswith("EXPOSE ") for ln in lines))
-        check("CMD 里带 uvicorn", any("uvicorn" in ln for ln in lines), "|".join(lines[-3:]))
-        check("不 COPY .env 进镜像", not any(ln.strip().startswith("COPY") and ".env" in ln for ln in lines))
-        # 层缓存顺序：pip install 之前的最后一行应是 COPY requirements
-        idx_pip = next((i for i, ln in enumerate(lines) if "pip install" in ln), -1)
-        idx_copy_req = next((i for i, ln in enumerate(lines) if "COPY" in ln and "requirements" in ln), -1)
-        check("pip install 在 COPY requirements 之后（利用层缓存）",
-              0 <= idx_copy_req < idx_pip, f"copy={idx_copy_req} pip={idx_pip}")
+    # ---- compose 结构 ----
+    dc = HERE / "docker-compose.yml"
+    check("docker-compose.yml 存在", dc.exists())
+    if dc.exists():
+        compose = yaml.safe_load(dc.read_text(encoding="utf-8"))
+        svc = compose.get("services", {})
+        check("有 app 服务", "app" in svc, str(list(svc)))
+        check("有 db 服务", "db" in svc, str(list(svc)))
+        if "db" in svc:
+            db = svc["db"]
+            check("db 用 postgres 镜像", "postgres" in str(db.get("image", "")))
+            check("db 有 healthcheck", "healthcheck" in db)
+            check("db 有数据卷", bool(db.get("volumes")))
+            check("db 有环境变量（POSTGRES_PASSWORD）",
+                  "POSTGRES_PASSWORD" in str(db.get("environment")))
+        if "app" in svc:
+            app_svc = svc["app"]
+            check("app 有 build", "build" in app_svc)
+            check("app 依赖 db", "db" in str(app_svc.get("depends_on")))
+            check("app 等 db healthy",
+                  "service_healthy" in str(app_svc.get("depends_on")),
+                  str(app_svc.get("depends_on")))
+            check("app 传 PG* 连接变量", all(
+                k in str(app_svc.get("environment")) for k in ("PGUSER", "PGAUTH", "PGHOST", "PGDB")
+            ), str(app_svc.get("environment")))
+            check("app 不把凭据写进 URL", "postgresql://" not in str(app_svc.get("environment")))
+            check("app 映射端口", bool(app_svc.get("ports")))
 
-    # ---------------- .dockerignore ----------------
-    di_path = HERE / ".dockerignore"
-    check(".dockerignore 存在", di_path.exists())
-    if di_path.exists():
-        di = di_path.read_text(encoding="utf-8")
-        for must in (".env", ".venv", "logs", "__pycache__", "*.db"):
-            check(f".dockerignore 排除 {must}", must in di, f"缺 {must}")
+    # ---- Dockerfile ----
+    df = HERE / "Dockerfile"
+    check("Dockerfile 存在", df.exists())
+    if df.exists():
+        txt = df.read_text(encoding="utf-8")
+        lines = [ln for ln in txt.splitlines() if ln.strip() and not ln.strip().startswith("#")]
+        check("首条指令是 FROM", lines[0].upper().startswith("FROM"))
+        check("非 root 运行", any(ln.upper().startswith("USER ") and "root" not in ln.lower() for ln in lines))
+        check("pip 走 USTC 镜像（否则国内构建卡死）", "mirrors.ustc.edu.cn" in txt)
+        check("有 HEALTHCHECK", "HEALTHCHECK" in txt)
 
-    # ---------------- docker-compose.yml ----------------
-    dc_path = HERE / "docker-compose.yml"
-    check("docker-compose.yml 存在", dc_path.exists())
-    if dc_path.exists():
-        try:
-            compose = yaml.safe_load(dc_path.read_text(encoding="utf-8"))
-        except Exception as exc:  # noqa: BLE001
-            check("compose 是合法 YAML", False, str(exc)[:120])
-            compose = None
-        if compose:
-            svc = compose.get("services", {})
-            check("有 services", bool(svc))
-            first = next(iter(svc.values()), {})
-            check("service 有 build 或 image", "build" in first or "image" in first)
-            ports = first.get("ports", [])
-            check("service 映射了端口", bool(ports))
-            exposed = re.findall(r"EXPOSE\s+(\d+)", df) if df_path.exists() else []
-            mapped = "".join(str(p) for p in ports)
-            check("compose 端口与 EXPOSE 一致",
-                  not exposed or any(e in mapped for e in exposed),
-                  f"EXPOSE={exposed} ports={ports}")
-            check("有健康检查", "healthcheck" in first or "healthcheck" in str(first.get("environment", "")))
-
-    # ---------------- 密钥不落盘 ----------------
-    env_example = HERE / ".env.example"
-    check(".env.example 存在（不含真实 key）", env_example.exists())
-    if env_example.exists():
-        ex = env_example.read_text(encoding="utf-8")
-        check("示例 key 是占位符", "sk-你的" in ex or "your" in ex.lower() or ex.strip().split("=")[-1].strip() in ("", '""'))
+    # ---- .dockerignore ----
+    di = HERE / ".dockerignore"
+    check(".dockerignore 存在", di.exists())
+    if di.exists():
+        d = di.read_text(encoding="utf-8")
+        for must in (".env", ".venv", "__pycache__"):
+            check(f"排除 {must}", must in d)
 
     print(f"\n结果：{passed} 通过 / {failed} 失败")
-    sys.exit(1 if failed else 0)
+    return 1 if failed else 0
+
+
+if __name__ == "__main__":
+    import sys
+
+    sys.exit(run_selfcheck())

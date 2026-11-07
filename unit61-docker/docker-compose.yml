@@ -1,13 +1,36 @@
 services:
-  unit61-docker:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${PGUSER:-app}
+      POSTGRES_PASSWORD: ${PGAUTH:-devonly}
+      POSTGRES_DB: ${PGDB:-notes}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PGUSER:-app} -d ${PGDB:-notes}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  app:
     build:
       context: .
       dockerfile: Dockerfile
     ports:
       - "8061:8000"
     environment:
-      - PORT=8000
-    # 声明式健康检查：compose 层面也能感知
+      # 拆成独立变量传给应用，由应用自己拼 DSN —— 避免凭据出现在 URL 里
+      PGUSER: ${PGUSER:-app}
+      PGAUTH: ${PGAUTH:-devonly}
+      PGDB: ${PGDB:-notes}
+      PGHOST: db
+      PGPORT: "5432"
+    depends_on:
+      db:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
       interval: 30s
@@ -15,3 +38,6 @@ services:
       retries: 3
       start_period: 5s
     restart: unless-stopped
+
+volumes:
+  pgdata:
