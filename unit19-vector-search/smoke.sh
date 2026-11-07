@@ -39,7 +39,8 @@ grep -qi "<!doctype html\|<html" /tmp/u19-index.html && ok "首页是 HTML" || b
 H=$(curl -s "http://127.0.0.1:$PORT/health")
 echo "$H" | grep -q '"chunks": *27' && ok "/health 报告 27 段语料" || bad "/health 语料数不对" "$H"
 echo "$H" | grep -q '"dim": *512' && ok "/health 报告 512 维" || bad "/health 维数不对" "$H"
-echo "$H" | grep -q '"questions": *12' && ok "/health 报告 12 题" || bad "/health 题目数不对"
+echo "$H" | grep -q '"questions": *12' && ok "/health 报告 12 道可答题" || bad "/health 可答题数不对"
+echo "$H" | grep -q '"unanswerable_questions": *6' && ok "/health 报告 6 道无答案题" || bad "/health 无答案题数不对"
 echo "$H" | grep -q 'category' && ok "/health 列出可过滤字段" || bad "/health 没列可过滤字段"
 
 # --- /search ---
@@ -71,7 +72,8 @@ echo "$T" | grep -q '"hits": *\[\]' && ok "阈值 0.9 把结果全剪掉（返�
 # --- /eval ---
 E=$(curl -s "http://127.0.0.1:$PORT/eval?top_k=3")
 echo "$E" | grep -q '"recall_at_k": *0.9167\|"recall_at_k": *0.917' && ok "/eval Recall@3 = 0.917" || bad "/eval Recall 不对" "$(echo "$E" | head -c 300)"
-echo "$E" | grep -q '"mrr"' && ok "/eval 返回 MRR" || bad "/eval 缺 MRR"
+echo "$E" | grep -q '"mrr_at_k": *0.9167\|"mrr_at_k": *0.917' && ok "/eval MRR@3 = 0.917" || bad "/eval MRR@3 不对"
+echo "$E" | grep -q '"accepted": *6' && ok "/eval 无阈值时 6 道无答案题全误接受" || bad "/eval 缺无答案题误接受统计"
 echo "$E" | grep -q '"details"' && ok "/eval 带逐题明细" || bad "/eval 缺逐题明细"
 
 # --- /corpus ---

@@ -9,7 +9,8 @@
   3. 断言所有文档里写死的数字，对不上就报错（文档漂移比 bug 更难发现）
 
 为什么要有这个脚本：README 里的数字是手抄的，代码改一次就可能全错，
-而没人会回头重抄。让脚本成为唯一数据源，文档只是它的输出。
+而没人会回头重抄。脚本中的断言对应文档数字；代码导致数值漂移时会变红，
+但修改文档本身不会被自动解析，所以改完代码仍要同步更新文档。
 """
 
 from __future__ import annotations
@@ -21,8 +22,16 @@ import tempfile
 import time
 
 import embedding as emb
-from main import ALL_CHUNKS, CORPUS, DISTRACTORS, QUESTIONS, _vectorize
-from metrics import evaluate
+from main import (
+    ALL_CHUNKS,
+    CORPUS,
+    DISTRACTORS,
+    QUESTIONS,
+    UNANSWERABLE_QUESTIONS,
+    _unanswerable_rows,
+    _vectorize,
+)
+from metrics import evaluate, evaluate_unanswerable
 from store import VectorStore
 
 FAILS: list[str] = []
@@ -64,7 +73,8 @@ def ranked_rows(store: VectorStore, qvecs: list[list[float]], top_k: int,
 def main() -> int:
     e = emb.get_embedder()
     print(f"[0] 环境：embedder={type(e).__name__} dim={e.dim} "
-          f"正文={len(CORPUS)} 干扰={len(DISTRACTORS)} 合计={len(ALL_CHUNKS)} 题目={len(QUESTIONS)}")
+          f"正文={len(CORPUS)} 干扰={len(DISTRACTORS)} 合计={len(ALL_CHUNKS)} "
+          f"可答题={len(QUESTIONS)} 无答案题={len(UNANSWERABLE_QUESTIONS)}")
     print()
 
     tmp = tempfile.mkdtemp(prefix="u19-verify-")
@@ -76,43 +86,59 @@ def main() -> int:
     # ---------------- [1] K 扫描 ----------------
     print("[1] K 扫描（12 题 / 27 段）")
     print()
-    print("| K | Recall@K | MRR | 命中题数 |")
+    print("| K | Recall@K | MRR@K | 命中题数@K |")
     print("| ---: | ---: | ---: | ---: |")
     sweep = {}
     for k in (1, 3, 5, 10):
         r = evaluate(wide, k)
         sweep[k] = r
-        print(f"| {k} | {r['recall_at_k']:.3f} | {r['mrr']:.3f} | {r['hits']}/{r['questions']} |")
+        print(f"| {k} | {r['recall_at_k']:.3f} | {r['mrr_at_k']:.3f} | {r['hits_at_k']}/{r['questions']} |")
     print()
-    check("Recall@1 == 0.917", abs(sweep[1]["recall_at_k"] - 0.917) < 5e-4, f"{sweep[1]['recall_at_k']}")
-    check("MRR == 0.925", abs(sweep[1]["mrr"] - 0.925) < 5e-4, f"{sweep[1]['mrr']}")
+    check("Recall@1 == 0.917", abs(sweep[1]["recall_at_k"] - 0.917) < 5e-4,
+          f"{sweep[1]['recall_at_k']}")
+    check("MRR@1 == 0.917（第 10 名在 K=1 时记 0）",
+          abs(sweep[1]["mrr_at_k"] - 0.917) < 5e-4, f"{sweep[1]['mrr_at_k']}")
+    check("MRR@10 == 0.925", abs(sweep[10]["mrr_at_k"] - 0.925) < 5e-4,
+          f"{sweep[10]['mrr_at_k']}")
     check("Recall@10 == 1.000", sweep[10]["recall_at_k"] == 1.0)
-    check("K 从 3 到 10 召回变大、MRR 不变",
+    check("K 从 3 到 10：Recall、MRR@K、命中题数都增加",
           sweep[10]["recall_at_k"] > sweep[3]["recall_at_k"]
-          and abs(sweep[10]["mrr"] - sweep[3]["mrr"]) < 1e-9,
+          and sweep[10]["mrr_at_k"] > sweep[3]["mrr_at_k"]
+          and sweep[3]["hits_at_k"] == 11 and sweep[10]["hits_at_k"] == 12,
           f"recall {sweep[3]['recall_at_k']}→{sweep[10]['recall_at_k']}, "
-          f"mrr {sweep[3]['mrr']}→{sweep[10]['mrr']}")
+          f"mrr {sweep[3]['mrr_at_k']}→{sweep[10]['mrr_at_k']}")
     print()
 
     # ---------------- [2] 阈值扫描 ----------------
-    print("[2] 阈值扫描（top_k=3）")
+    print("[2] 阈值扫描（top_k=3；同时看可答题误拒与无答案题误接受）")
     print()
-    print("| min_score | Recall@3 | MRR | 平均返回 | 完全为空的题 |")
-    print("| ---: | ---: | ---: | ---: | ---: |")
+    print("| min_score | Recall@3 | MRR@3 | 平均返回 | 可答题空 | 无答案误接受 |")
+    print("| ---: | ---: | ---: | ---: | ---: | ---: |")
     thr_rows = {}
+    unanswerable_qvecs = _vectorize(UNANSWERABLE_QUESTIONS)
     for t in (None, 0.1, 0.15, 0.2):
         rows = ranked_rows(store, qvecs, 3, t)
         r = evaluate(rows, 3)
         avg = round(sum(x["count"] for x in rows) / len(rows), 2)
         empty = sum(1 for x in rows if x["count"] == 0)
-        thr_rows[t] = (r["recall_at_k"], avg, empty)
-        print(f"| {'无' if t is None else t} | {r['recall_at_k']:.3f} | {r['mrr']:.3f} | {avg:.2f} | {empty} |")
+        un = evaluate_unanswerable(_unanswerable_rows(store, unanswerable_qvecs, 3, t))
+        thr_rows[t] = (r["recall_at_k"], avg, empty, un)
+        print(f"| {'无' if t is None else t} | {r['recall_at_k']:.3f} | {r['mrr_at_k']:.3f} "
+              f"| {avg:.2f} | {empty} | {un['accepted']}/{un['questions']} |")
     print()
     check("阈值 0.15 召回不掉", thr_rows[0.15][0] == thr_rows[None][0],
           f"{thr_rows[None][0]} → {thr_rows[0.15][0]}")
-    check("阈值 0.15 平均返回 == 2.08", abs(thr_rows[0.15][1] - 2.08) < 5e-3, f"{thr_rows[0.15][1]}")
+    check("阈值 0.15 平均返回 == 2.08", abs(thr_rows[0.15][1] - 2.08) < 5e-3,
+          f"{thr_rows[0.15][1]}")
+    check("0.15 让一道可答题变空，是误拒而不是拒答成功", thr_rows[0.15][2] == 1,
+          f"可答题空={thr_rows[0.15][2]}")
+    check("0.15 仍误接受 4/6 无答案题，不能称为可靠拒答阈值",
+          thr_rows[0.15][3]["accepted"] == 4, str(thr_rows[0.15][3]))
     check("阈值 0.2 开始掉召回", thr_rows[0.2][0] < thr_rows[0.15][0],
           f"{thr_rows[0.15][0]} → {thr_rows[0.2][0]}")
+    check("没有扫描点同时做到保住 Recall@3 和拒绝全部无答案题",
+          all(not (thr_rows[t][0] == thr_rows[None][0] and thr_rows[t][3]["accepted"] == 0)
+              for t in (None, 0.1, 0.15, 0.2)))
     print()
 
     # ---------------- [3] 逐题明细 ----------------
@@ -147,8 +173,8 @@ def main() -> int:
     r10 = evaluate(clean_wide, 10)
     print("| 语料 | Recall@1 | Recall@10 | MRR@10 |")
     print("| --- | ---: | ---: | ---: |")
-    print(f"| 16 段正文（干净） | {r1['recall_at_k']:.3f} | {r10['recall_at_k']:.3f} | {r10['mrr']:.3f} |")
-    print(f"| 27 段（含干扰） | {sweep[1]['recall_at_k']:.3f} | {sweep[10]['recall_at_k']:.3f} | {sweep[10]['mrr']:.3f} |")
+    print(f"| 16 段正文（干净） | {r1['recall_at_k']:.3f} | {r10['recall_at_k']:.3f} | {r10['mrr_at_k']:.3f} |")
+    print(f"| 27 段（含干扰） | {sweep[1]['recall_at_k']:.3f} | {sweep[10]['recall_at_k']:.3f} | {sweep[10]['mrr_at_k']:.3f} |")
     print()
     # 那题在两套语料里各排第几 —— 这是全章最该看清的一个数字演变
     clean_rank = next(d["rank"] for d, q in zip(clean_det, QUESTIONS) if q["q"] == worst["q"])
@@ -160,8 +186,9 @@ def main() -> int:
           clean_rank > 1, f"rank={clean_rank}")
     check("干扰段把它进一步推后（干扰放大语义盲区）",
           worst["rank"] > clean_rank, f"{clean_rank} → {worst['rank']}")
-    check("加干扰后 MRR 下降（干扰段确实抬高了噪声）",
-          r10["mrr"] > sweep[10]["mrr"], f"{r10['mrr']} → {sweep[10]['mrr']}")
+    check("加干扰后 MRR@10 下降（干扰段确实抬高了噪声）",
+          r10["mrr_at_k"] > sweep[10]["mrr_at_k"],
+          f"{r10['mrr_at_k']} → {sweep[10]['mrr_at_k']}")
     print()
 
     # ---------------- [5] 过滤 ----------------
@@ -252,14 +279,24 @@ def main() -> int:
 
     # ---------------- [7] 分数分布 ----------------
     scores = [d["top_score"] for d in wide]
-    print(f"[7] Top-1 分数分布：min={min(scores):.3f} max={max(scores):.3f} "
+    un_rows = _unanswerable_rows(store, unanswerable_qvecs, 3, None)
+    un_scores = [d["top_score"] for d in un_rows]
+    print(f"[7] 可答题 Top-1 分数：min={min(scores):.3f} max={max(scores):.3f} "
           f"中位={statistics.median(scores):.3f}")
+    print(f"    无答案题 Top-1 分数：min={min(un_scores):.3f} max={max(un_scores):.3f} "
+          f"中位={statistics.median(un_scores):.3f}")
+    print("    无答案题逐题：" + "；".join(
+        f"{d['q']}={d['top_score']:.3f}" for d in un_rows
+    ))
     print()
-    check("Top-1 分数全部挤在 0~0.6（哈希向量的分数空间很窄）",
+    check("可答题 Top-1 分数全部挤在 0~0.6（哈希向量的分数空间很窄）",
           max(scores) < 0.6, f"max={max(scores):.3f}")
+    check("两组 Top-1 分数分布重叠，不能只凭 top1 完美分开",
+          max(un_scores) >= min(scores),
+          f"可答 min={min(scores):.3f}，无答案 max={max(un_scores):.3f}")
     print()
 
-    print(f"结果：{len(FAILS)} 项不符" if FAILS else "结果：全部与文档一致")
+    print(f"结果：{len(FAILS)} 项不符" if FAILS else "结果：全部复现断言通过")
     for f in FAILS:
         print(f"  - {f}")
     return 1 if FAILS else 0

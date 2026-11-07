@@ -50,7 +50,7 @@
 <body>
 <div class="wrap">
   <h1>Unit 19 · 向量检索实验台</h1>
-  <div class="sub">同一句 query：改 top_k、改阈值、加过滤，看召回和排名怎么变</div>
+  <div class="sub">12 道可答题 + 6 道无答案题：同时看 Recall/MRR@K、误拒和误接受</div>
 
   <div class="banner" id="health">探测后端…</div>
 
@@ -68,7 +68,7 @@
     <div class="row" style="margin-bottom:10px" id="cats"></div>
     <div class="row">
       <button class="primary" onclick="run()">检索</button>
-      <button onclick="runEval()">跑 12 题评测</button>
+      <button onclick="runEval()">跑 12+6 题评测</button>
     </div>
   </div>
 
@@ -100,7 +100,7 @@ async function loadHealth() {
   try {
     const h = await getJSON("health");
     b.className = "banner ok";
-    b.textContent = `${h.chunks} 段 / ${h.chars} 字 / ${h.dim} 维 · 向量后端 ${h.embedder} · 可过滤字段 ${h.filterable.join(" / ")}`;
+    b.textContent = `${h.chunks} 段 / ${h.chars} 字 / ${h.dim} 维 · ${h.questions} 道可答题 + ${h.unanswerable_questions} 道无答案题 · 向量后端 ${h.embedder}`;
     $("cats").innerHTML = `<span class="tag">category</span>` + ["", "hr", "refund", "ops", "sec", "release"]
       .map(c => `<button class="chip${c === "" ? " on" : ""}" data-c="${c}" onclick="pickCat(this)">${c || "全部"}</button>`).join("");
   } catch (e) {
@@ -151,7 +151,7 @@ async function run() {
         <div class="tx">${mark(h.text, $("q").value)}</div>
         <div class="bar"><i style="width:${Math.max(2, h.score * 100)}%"></i></div>
       </div>`).join("")
-      : `<div class="card"><div class="err">阈值 ${d.min_score} 把结果全剪掉了 —— 这就是该拒答的信号</div></div>`;
+      : `<div class="card"><div class="err">检索为空：可答题被清空是误拒；无答案题被清空才是正确拒答。必须结合两组评测判断。</div></div>`;
   } catch (e) {
     $("out").innerHTML = `<div class="card"><div class="err">${esc(e.message)}</div></div>`;
     $("stats").innerHTML = "";
@@ -176,31 +176,42 @@ async function runEval() {
     const best = Math.max(...d.sweep.map(s => s.recall));
     $("metrics").innerHTML = `
       <div class="card">
-        <h2>② 12 题评测（top_k=${d.top_k}）</h2>
+        <h2>② 12 道可答题（top_k=${d.top_k}）</h2>
         <div class="grid" style="grid-template-columns:repeat(3,1fr)">
           <div class="stat"><b>${d.recall_at_k.toFixed(2)}</b><span>Recall@${d.top_k}</span></div>
-          <div class="stat"><b>${d.mrr.toFixed(3)}</b><span>MRR</span></div>
-          <div class="stat"><b>${d.hits}/${d.questions}</b><span>命中题数</span></div>
+          <div class="stat"><b>${d.mrr_at_k.toFixed(3)}</b><span>MRR@${d.top_k}</span></div>
+          <div class="stat"><b>${d.hits_at_k}/${d.questions}</b><span>命中题数@${d.top_k}</span></div>
         </div>
-        <table><thead><tr><th>K</th><th class="num">Recall@K</th><th class="num">MRR</th></tr></thead>
+        <table><thead><tr><th>K</th><th class="num">Recall@K</th><th class="num">MRR@K</th><th class="num">命中@K</th></tr></thead>
         <tbody>${d.sweep.map(s => `<tr>
           <td>${s.k}</td>
           <td class="num" style="${s.recall === best ? "color:var(--ok)" : ""}">${s.recall.toFixed(2)}</td>
-          <td class="num">${s.mrr.toFixed(3)}</td></tr>`).join("")}</tbody></table>
-        <div class="note">K 变大 Recall 只会升、MRR 不一定 —— 前者说「能不能找到」，后者说「排得靠不靠前」。</div>
+          <td class="num">${s.mrr_at_k.toFixed(3)}</td>
+          <td class="num">${s.hits_at_k}/${s.questions}</td></tr>`).join("")}</tbody></table>
+        <div class="note">固定同一排序，K 变大时 Recall@K 和 MRR@K 都单调不减，也可能持平。MRR@K 只计算前 K 条内的首个正确结果。</div>
       </div>`;
     $("eval").innerHTML = `
       <div class="card">
-        <h2>③ 阈值扫描：加阈值换来了什么</h2>
-        <table><thead><tr><th>min_score</th><th class="num">Recall@${d.top_k}</th><th class="num">MRR</th><th class="num">平均返回</th><th class="num">完全空</th></tr></thead>
+        <h2>③ 阈值扫描：误拒与误接受要一起看</h2>
+        <table><thead><tr><th>min_score</th><th class="num">Recall@${d.top_k}</th><th class="num">MRR@${d.top_k}</th><th class="num">平均返回</th><th class="num">可答题空</th><th class="num">无答案误接受</th></tr></thead>
         <tbody>${d.thresholds.map(t => `<tr>
           <td>${t.min_score ?? "无"}</td>
           <td class="num">${t.recall.toFixed(2)}</td>
-          <td class="num">${t.mrr.toFixed(3)}</td>
+          <td class="num">${t.mrr_at_k.toFixed(3)}</td>
           <td class="num">${t.avg_returned}</td>
-          <td class="num ${t.empty ? "err" : ""}">${t.empty}</td></tr>`).join("")}</tbody></table>
-        <h2 style="margin-top:14px">逐题明细</h2>
-        <table><thead><tr><th>问题</th><th class="num">首个命中排名</th><th class="num">RR</th></tr></thead>
+          <td class="num ${t.answerable_empty ? "err" : ""}">${t.answerable_empty}</td>
+          <td class="num ${t.unanswerable_accepted ? "err" : ""}">${t.unanswerable_accepted}/${t.unanswerable_total}</td></tr>`).join("")}</tbody></table>
+        <div class="note">可答题空 = 误拒；无答案题仍返回候选 = 检索层误接受。0.15 不是通用最佳阈值，更不能只凭 Top-1 分数保证拒答。</div>
+        <h2 style="margin-top:14px">④ 当前阈值下的 6 道无答案题</h2>
+        <p class="sub">仍返回结果 ${d.unanswerable.accepted}/${d.unanswerable.questions}，误接受率 ${(d.unanswerable.false_acceptance_rate * 100).toFixed(0)}%</p>
+        <table><thead><tr><th>问题</th><th>Top-1 块</th><th class="num">Top-1 分数</th><th class="num">返回条数</th></tr></thead>
+        <tbody>${d.unanswerable.details.map(x => `<tr>
+          <td>${esc(x.q)}</td>
+          <td>${esc(x.top1 ?? "—")}</td>
+          <td class="num">${x.top_score.toFixed(3)}</td>
+          <td class="num">${x.count}</td></tr>`).join("")}</tbody></table>
+        <h2 style="margin-top:14px">⑤ 可答题逐题明细</h2>
+        <table><thead><tr><th>问题</th><th class="num">首个命中排名</th><th class="num">RR@${d.top_k}</th></tr></thead>
         <tbody>${d.details.map(x => `<tr>
           <td>${esc(x.q)}</td>
           <td class="num">${x.rank ?? "未命中"}</td>

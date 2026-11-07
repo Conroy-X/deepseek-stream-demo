@@ -24,7 +24,13 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 import embedding as emb
-from metrics import evaluate, recall_at_k, reciprocal_rank
+from metrics import (
+    evaluate,
+    evaluate_unanswerable,
+    recall_at_k,
+    reciprocal_rank,
+    reciprocal_rank_at_k,
+)
 from store import (
     FILTERABLE,
     MAX_TOP_K,
@@ -83,8 +89,8 @@ CORPUS = [
 ]
 
 # 干扰段：和问题共享大量字词，但**不含答案原文**。
-# 没有它们的话，12 题在 Top-1 全命中，Recall 和 MRR 都是 1.0 ——
-# 那种数字只能证明语料太干净，证明不了检索好用。
+# 去掉它们后仍有一题因同义改写而排第 5；加入后该题进一步跌到第 10。
+# 因而语义盲区是主因，干扰段是放大器，不能把低分全归咎于干扰。
 DISTRACTORS = [
     {"id": "faq:1:17", "source": "faq.md", "page": 1, "category": "hr",
      "text": "年假结转申请需在次年 1 月 15 日前提交，逾期视为放弃。年假天数随司龄增长，入职当月按比例折算，年假不可预支。"},
@@ -127,6 +133,19 @@ QUESTIONS = [
     {"q": "多少金额需要走招标流程", "gold": "ops:2:11", "expected": "超过 5 万元须走招标流程"},
     {"q": "账号会被锁定多久", "gold": "sec:1:13", "expected": "锁定账号 30 分钟"},
     {"q": "回滚后先检查什么", "gold": "rel:1:16", "expected": "数据库迁移是否可逆"},
+]
+
+# 无答案题不能塞进 Recall/MRR：它们没有 gold，应该单独衡量“检索层误接受”。
+# 只要仍返回候选块就记为误接受；这不等于 LLM 最终一定误答，但说明空结果拒答失效。
+# 还要确认语料没有间接答案：「退款能退到他人卡吗」可由「原路退回」作答，不能放入；
+# 「退款手续费由谁承担」才是语料未规定的问题。
+UNANSWERABLE_QUESTIONS = [
+    "陪产假可以休多少天",
+    "退款手续费由谁承担",
+    "宿舍能申请单人间吗",
+    "招标评审小组必须有几个人",
+    "发布失败由谁通知客户",
+    "员工每年体检报销多少钱",
 ]
 
 
@@ -183,6 +202,7 @@ def health() -> dict:
         "filterable": sorted(FILTERABLE),
         "max_top_k": MAX_TOP_K,
         "questions": len(QUESTIONS),
+        "unanswerable_questions": len(UNANSWERABLE_QUESTIONS),
     }
 
 
@@ -237,35 +257,63 @@ def _ranked_rows(store: VectorStore, qvecs: list[list[float]], top_k: int,
     return rows
 
 
-@app.get("/eval", summary="12 题评测：Recall@K、MRR、阈值与 top_k 的影响")
+def _unanswerable_rows(store: VectorStore, qvecs: list[list[float]], top_k: int,
+                       min_score: float | None) -> list[dict]:
+    """无答案题没有 gold，只记录是否仍返回候选块以及 Top-1 分数。"""
+    rows = []
+    for q, qv in zip(UNANSWERABLE_QUESTIONS, qvecs):
+        res = store.search(qv, top_k=top_k, min_score=min_score)
+        rows.append(
+            {
+                "q": q,
+                "ranked": [h.id for h in res.hits],
+                "count": len(res.hits),
+                "top1": res.hits[0].id if res.hits else None,
+                "top_score": round(res.hits[0].score, 4) if res.hits else 0.0,
+            }
+        )
+    return rows
+
+
+@app.get("/eval", summary="可答题 Recall/MRR@K + 无答案题误接受率")
 def eval_route(
     top_k: int = Query(default=3, ge=1, le=MAX_TOP_K),
     min_score: float | None = Query(default=None, ge=-1, le=1),
 ) -> dict:
     store = get_store()
     qvecs = _vectorize([q["q"] for q in QUESTIONS])
+    unanswerable_qvecs = _vectorize(UNANSWERABLE_QUESTIONS)
 
     main_rows = _ranked_rows(store, qvecs, top_k, min_score)
     main = evaluate(main_rows, top_k)
+    current_unanswerable_rows = _unanswerable_rows(store, unanswerable_qvecs, top_k, min_score)
+    current_unanswerable = evaluate_unanswerable(current_unanswerable_rows)
 
-    # 一次取 10 条，再按 k 截断 —— 比每题跑 4 次便宜，也保证各 K 看到的是同一份排序
+    # 一次取 10 条，再按 k 截断；Recall、MRR 和命中题数必须使用同一个 K。
     wide = _ranked_rows(store, qvecs, 10, min_score)
     sweep = [evaluate(wide, k) for k in (1, 3, 5, 10)]
-    sweep = [{"k": s["k"], "recall": s["recall_at_k"], "mrr": s["mrr"], "hits": s["hits"]}
-             for s in sweep]
+    sweep = [
+        {"k": s["k"], "recall": s["recall_at_k"], "mrr_at_k": s["mrr_at_k"],
+         "hits_at_k": s["hits_at_k"], "questions": s["questions"]}
+        for s in sweep
+    ]
 
-    # 阈值扫描：看清「加阈值」到底换来了什么（少噪声 vs 少召回）
+    # 阈值同时看两侧：可答题误拒 vs 无答案题误接受。只看一侧会选出假拐点。
     thr = []
     for t in (None, 0.1, 0.15, 0.2):
         rows = _ranked_rows(store, qvecs, top_k, t)
         r = evaluate(rows, top_k)
+        un = evaluate_unanswerable(_unanswerable_rows(store, unanswerable_qvecs, top_k, t))
         thr.append(
             {
                 "min_score": t,
                 "recall": r["recall_at_k"],
-                "mrr": r["mrr"],
+                "mrr_at_k": r["mrr_at_k"],
                 "avg_returned": round(sum(x["count"] for x in rows) / len(rows), 2),
-                "empty": sum(1 for x in rows if x["count"] == 0),
+                "answerable_empty": sum(1 for x in rows if x["count"] == 0),
+                "unanswerable_accepted": un["accepted"],
+                "unanswerable_total": un["questions"],
+                "false_acceptance_rate": un["false_acceptance_rate"],
             }
         )
 
@@ -273,11 +321,18 @@ def eval_route(
         "top_k": top_k,
         "min_score": min_score,
         "recall_at_k": main["recall_at_k"],
-        "mrr": main["mrr"],
-        "hits": main["hits"],
+        "mrr_at_k": main["mrr_at_k"],
+        "hits_at_k": main["hits_at_k"],
         "questions": main["questions"],
         "sweep": sweep,
         "thresholds": thr,
+        "unanswerable": {
+            **current_unanswerable,
+            "details": [
+                {k: v for k, v in row.items() if k != "ranked"}
+                for row in current_unanswerable_rows
+            ],
+        },
         "details": [
             {k: v for k, v in d.items() if k != "rr"} | {"rr": round(d["rr"], 4)}
             for d in main["details"]
@@ -429,16 +484,38 @@ if __name__ == "__main__":
     ranked, gold = ["a", "b", "c"], ["b"]
     check("gold 排第 2 → Recall@1 = 0", recall_at_k(ranked, gold, 1) == 0.0)
     check("gold 排第 2 → Recall@2 = 1", recall_at_k(ranked, gold, 2) == 1.0)
-    check("gold 排第 2 → RR = 1/2", abs(reciprocal_rank(ranked, gold) - 0.5) < 1e-9)
+    check("完整列表 RR = 1/2", abs(reciprocal_rank(ranked, gold) - 0.5) < 1e-9)
+    check("gold 排第 2 → RR@1 = 0", reciprocal_rank_at_k(ranked, gold, 1) == 0.0)
+    check("gold 排第 2 → RR@2 = 1/2", abs(reciprocal_rank_at_k(ranked, gold, 2) - 0.5) < 1e-9)
     check("gold 不在结果里 → RR = 0", reciprocal_rank(["a", "c"], ["b"]) == 0.0)
     check("gold 排第 1 → RR = 1", reciprocal_rank(["b", "a"], ["b"]) == 1.0)
     check("Recall 随 K 单调不减",
           recall_at_k(ranked, gold, 1) <= recall_at_k(ranked, gold, 2) <= recall_at_k(ranked, gold, 3))
-    try:
-        recall_at_k(ranked, gold, 0)
-        check("K <= 0 被拒绝", False, "没抛异常")
-    except ValueError:
-        check("K <= 0 被拒绝", True)
+    metric_rows = [
+        {"q": "q1", "ranked": ["a", "b"], "gold": ["b"]},
+        {"q": "q2", "ranked": ["c", "d"], "gold": ["x"]},
+    ]
+    metric_k1 = evaluate(metric_rows, 1)
+    metric_k2 = evaluate(metric_rows, 2)
+    check("两题手算 Recall@1 = 0、MRR@1 = 0、命中 0",
+          metric_k1["recall_at_k"] == 0 and metric_k1["mrr_at_k"] == 0
+          and metric_k1["hits_at_k"] == 0, str(metric_k1))
+    check("两题手算 Recall@2 = 0.5、MRR@2 = 0.25、命中 1",
+          metric_k2["recall_at_k"] == 0.5 and metric_k2["mrr_at_k"] == 0.25
+          and metric_k2["hits_at_k"] == 1, str(metric_k2))
+    un_metric = evaluate_unanswerable([
+        {"q": "u1", "ranked": ["a"]}, {"q": "u2", "ranked": []},
+    ])
+    check("两道无答案题一道有结果 → 误接受率 0.5",
+          un_metric["false_acceptance_rate"] == 0.5 and un_metric["rejected"] == 1,
+          str(un_metric))
+    for label, fn in (("Recall", lambda: recall_at_k(ranked, gold, 0)),
+                      ("RR", lambda: reciprocal_rank_at_k(ranked, gold, 0))):
+        try:
+            fn()
+            check(f"{label} 的 K <= 0 被拒绝", False, "没抛异常")
+        except ValueError:
+            check(f"{label} 的 K <= 0 被拒绝", True)
 
     print("\n  —— 真实语料：12 题评测 ——")
     st = seed_store(os.path.join(tempfile.mkdtemp(prefix="u19-"), "v.db"))
@@ -449,17 +526,25 @@ if __name__ == "__main__":
 
     qvecs = _vectorize([q["q"] for q in QUESTIONS])
     wide = _ranked_rows(st, qvecs, 10, None)
-    check("拿到的命中都真的包含答案原文", all(r["text_ok"] for r in wide if r["ranked"]),
-          str([r["q"] for r in wide if r["ranked"] and not r["text_ok"]]))
+    check("每题 Top-10 至少一段包含答案原文", all(r["text_ok"] for r in wide),
+          str([r["q"] for r in wide if not r["text_ok"]]))
     sweep = {k: evaluate(wide, k) for k in (1, 3, 5, 10)}
     for k in (1, 3, 5, 10):
-        print(f"       K={k:<2d} recall@{k} = {sweep[k]['recall_at_k']:.3f}   MRR = {sweep[k]['mrr']:.3f}   "
-              f"命中 {sweep[k]['hits']}/{len(QUESTIONS)}")
+        print(f"       K={k:<2d} recall@{k} = {sweep[k]['recall_at_k']:.3f}   "
+              f"MRR@{k} = {sweep[k]['mrr_at_k']:.3f}   "
+              f"命中 {sweep[k]['hits_at_k']}/{len(QUESTIONS)}")
     check("Recall@1 >= 0.8（本地哈希向量的字面匹配基线）", sweep[1]["recall_at_k"] >= 0.8,
           str(sweep[1]["recall_at_k"]))
     check("Recall@3 >= 0.9", sweep[3]["recall_at_k"] >= 0.9, str(sweep[3]["recall_at_k"]))
     check("Recall@10 = 1.0（排在后面的也还在库里）", sweep[10]["recall_at_k"] == 1.0,
           str(sweep[10]["recall_at_k"]))
+    check("MRR@1 = 11/12 ≈ 0.917（第 10 名在 K=1 时记 0）",
+          abs(sweep[1]["mrr_at_k"] - 11 / 12) < 5e-4, str(sweep[1]["mrr_at_k"]))
+    check("MRR@10 = (11 + 1/10) / 12 = 0.925",
+          sweep[10]["mrr_at_k"] == 0.925, str(sweep[10]["mrr_at_k"]))
+    check("命中题数也按 K 截断：@1=11、@10=12",
+          sweep[1]["hits_at_k"] == 11 and sweep[10]["hits_at_k"] == 12,
+          f"{sweep[1]['hits_at_k']} / {sweep[10]['hits_at_k']}")
     ranks = {d["q"]: d["rank"] for d in evaluate(wide, 10)["details"]}
     late = {q: r for q, r in ranks.items() if r is None or r > 3}
     print(f"       Top-3 之外：{late or '无'}")
@@ -469,25 +554,32 @@ if __name__ == "__main__":
     check("Recall 单调：@1 <= @3 <= @5 <= @10",
           sweep[1]["recall_at_k"] <= sweep[3]["recall_at_k"] <= sweep[5]["recall_at_k"] <= sweep[10]["recall_at_k"],
           str({k: v["recall_at_k"] for k, v in sweep.items()}))
-    check("MRR 在 0.5..1 之间（Top-1 命中居多但不是全部）", 0.5 <= sweep[10]["mrr"] <= 1.0,
-          str(sweep[10]["mrr"]))
-    check("MRR 随 K 单调不减", sweep[1]["mrr"] <= sweep[3]["mrr"] <= sweep[10]["mrr"],
-          str([sweep[k]["mrr"] for k in (1, 3, 10)]))
+    check("MRR@10 在 0.5..1 之间（Top-1 命中居多但不是全部）",
+          0.5 <= sweep[10]["mrr_at_k"] <= 1.0, str(sweep[10]["mrr_at_k"]))
+    check("MRR@K 随 K 单调不减",
+          sweep[1]["mrr_at_k"] <= sweep[3]["mrr_at_k"] <= sweep[10]["mrr_at_k"],
+          str([sweep[k]["mrr_at_k"] for k in (1, 3, 10)]))
     check("评测明细逐题带 rank 字段", all("rank" in d for d in evaluate(wide, 3)["details"]))
 
-    print("\n  —— 阈值与 top_k 的影响（这才是调参的依据）——")
+    print("\n  —— 阈值与 top_k：同时看误拒和误接受 ——")
     no_thr = _ranked_rows(st, qvecs, 3, None)
+    unanswerable_qvecs = _vectorize(UNANSWERABLE_QUESTIONS)
     stats_thr = {}
-    for t in (0.1, 0.15, 0.2):
+    stats_unanswerable = {}
+    for t in (None, 0.1, 0.15, 0.2):
         rows = _ranked_rows(st, qvecs, 3, t)
         e = evaluate(rows, 3)
         avg = sum(r["count"] for r in rows) / len(rows)
         stats_thr[t] = (e, sum(r["count"] for r in rows), sum(1 for r in rows if not r["ranked"]))
-        print(f"       min_score={t}  recall@3={e['recall_at_k']:.3f}  MRR={e['mrr']:.3f}  "
-              f"平均返回 {avg:.2f} 条  完全空 {stats_thr[t][2]} 题")
+        un = evaluate_unanswerable(_unanswerable_rows(st, unanswerable_qvecs, 3, t))
+        stats_unanswerable[t] = un
+        print(f"       min_score={t}  recall@3={e['recall_at_k']:.3f}  MRR@3={e['mrr_at_k']:.3f}  "
+              f"平均返回 {avg:.2f} 条  可答题空 {stats_thr[t][2]}  "
+              f"无答案误接受 {un['accepted']}/{un['questions']}")
     base_total = sum(r["count"] for r in no_thr)
-    check("阈值 0.1 不损失召回（只是把明显无关的剪掉）",
-          stats_thr[0.1][0]["recall_at_k"] == evaluate(no_thr, 3)["recall_at_k"],
+    base_recall = evaluate(no_thr, 3)["recall_at_k"]
+    check("阈值 0.1 不损失 Recall@3",
+          stats_thr[0.1][0]["recall_at_k"] == base_recall,
           str(stats_thr[0.1][0]["recall_at_k"]))
     check("阈值 0.15 仍保住 Recall@3（且返回条数更少）",
           stats_thr[0.15][0]["recall_at_k"] >= 0.9 and stats_thr[0.15][1] < base_total,
@@ -498,10 +590,22 @@ if __name__ == "__main__":
     check("平均返回条数随阈值单调不增",
           base_total >= stats_thr[0.1][1] >= stats_thr[0.15][1] >= stats_thr[0.2][1],
           str([base_total] + [stats_thr[t][1] for t in (0.1, 0.15, 0.2)]))
-    check("阈值 0.2 下已有 2 题完全空 —— 这就是 Unit 20 拒答的触发点",
-          stats_thr[0.2][2] >= 2, str(stats_thr[0.2][2]))
+    empty_at_015 = [r["q"] for r in _ranked_rows(st, qvecs, 3, 0.15) if not r["ranked"]]
+    check("0.15 让一道可答题变空：这是误拒，不是拒答成功",
+          empty_at_015 == ["住宿费一晚最多报多少"], str(empty_at_015))
+    check("无阈值时 6 道无答案题全有结果（暴力检索总能排出 Top-K）",
+          stats_unanswerable[None]["accepted"] == len(UNANSWERABLE_QUESTIONS),
+          str(stats_unanswerable[None]))
+    check("0.15 仍误接受 4/6 无答案题，不能当成可靠拒答阈值",
+          stats_unanswerable[0.15]["accepted"] == 4,
+          str(stats_unanswerable[0.15]))
+    check("扫描点里没有既保住 Recall@3 又拒绝全部无答案题的阈值",
+          all(not (stats_thr[t][0]["recall_at_k"] == base_recall
+                   and stats_unanswerable[t]["accepted"] == 0)
+              for t in (None, 0.1, 0.15, 0.2)),
+          str({str(t): stats_unanswerable[t]["accepted"] for t in stats_unanswerable}))
     r_top10 = st.search(qvecs[0], top_k=10)
-    check("top_k=10 返回 10 条（库里有 16 条）", len(r_top10.hits) == 10, str(len(r_top10.hits)))
+    check("top_k=10 返回 10 条（库里有 27 条）", len(r_top10.hits) == 10, str(len(r_top10.hits)))
     check("top_k=10 的前 3 名与 top_k=3 完全一致",
           [h.id for h in r_top10.hits[:3]] == [h.id for h in st.search(qvecs[0], top_k=3).hits],
           "排序不稳定")
@@ -540,6 +644,8 @@ if __name__ == "__main__":
     client = TestClient(app)
     r = client.get("/health")
     check("GET /health 返回语料规模", r.status_code == 200 and r.json()["chunks"] == 27, str(r.status_code))
+    check("/health 报告 12 道可答题 + 6 道无答案题",
+          r.json()["questions"] == 12 and r.json()["unanswerable_questions"] == 6)
     check("/health 暴露 filterable 白名单", "category" in r.json()["filterable"])
 
     r = client.post("/search", json={"query": "退款多久到账", "top_k": 3})
@@ -558,10 +664,21 @@ if __name__ == "__main__":
     check("top_k=0 返回 422（Pydantic 先拦住）", r.status_code == 422, str(r.status_code))
 
     r = client.get("/eval", params={"top_k": 3})
-    check("GET /eval 返回 recall 与 mrr",
-          r.status_code == 200 and 0 <= r.json()["recall_at_k"] <= 1 and 0 <= r.json()["mrr"] <= 1)
+    check("GET /eval 返回 Recall@K 与 MRR@K",
+          r.status_code == 200 and 0 <= r.json()["recall_at_k"] <= 1
+          and 0 <= r.json()["mrr_at_k"] <= 1)
+    check("/eval 命中题数按 K 截断",
+          r.json()["hits_at_k"] == 11 and r.json()["sweep"][0]["hits_at_k"] == 11,
+          str(r.json()["hits_at_k"]))
     check("/eval 带 K 扫描与阈值扫描",
           len(r.json()["sweep"]) == 4 and len(r.json()["thresholds"]) == 4)
+    check("/eval 返回无答案题误接受率",
+          r.json()["unanswerable"]["questions"] == 6
+          and r.json()["unanswerable"]["accepted"] == 6,
+          str(r.json()["unanswerable"]))
+    check("/eval 阈值行同时报告可答题空与无答案误接受",
+          all({"answerable_empty", "unanswerable_accepted"} <= set(row)
+              for row in r.json()["thresholds"]))
     check("/eval 明细逐题可见", len(r.json()["details"]) == len(QUESTIONS))
 
     r = client.get("/corpus")
