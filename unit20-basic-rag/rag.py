@@ -166,7 +166,7 @@ def api_config() -> dict:
     return {
         "api_key": key,
         "base_url": (os.getenv("OPENAI_BASE_URL") or "https://api.deepseek.com").strip().rstrip("/"),
-        "model": (os.getenv("OPENAI_MODEL") or "deepseek-chat").strip(),
+        "model": (os.getenv("OPENAI_MODEL") or "deepseek-flash").strip(),
     }
 
 
