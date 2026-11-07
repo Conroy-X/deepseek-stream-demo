@@ -205,7 +205,7 @@ def health() -> dict[str, object]:
     }
 
 
-# 邮箱统一转小写再入库：否则 A@x.com 和 a@x.com 会注册成两个账号，登录时对不上
+# 邮箱统一转小写再入库：否则 A@example.com 和 a@example.com 会注册成两个账号，登录时对不上
 @app.post("/register", status_code=201, summary="注册")
 def register(payload: RegisterRequest, session: Session = Depends(store.get_session)) -> dict:
     user = User(

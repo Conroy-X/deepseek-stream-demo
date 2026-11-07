@@ -110,8 +110,9 @@
 > Unit 16 实测备忘（2026-11-03）：5 万行 / 512 维 / top10，全表扫 260ms → HNSW 0.98ms（**266×**）；
 > 坑：`ef_search` 拉太大 planner 会弃索引退回 Seq Scan——**建了索引 ≠ 用上索引，必须 EXPLAIN 确认**。
 
-> 四个 project 不再单独建目录：项目 1 收在 `unit14-project1/`，
-> 项目 2（企业知识库 RAG）由 Unit 15–30 逐单元累积而成。
+> 四个 project 各有独立目录：项目 1 收在 `unit14-project1/`，项目 2（企业知识库 RAG）
+> 收在 `unit30-project2/`，项目 3（Research Agent）收在 `unit45-project3/`，
+> 项目 4（MCP 数据库 Agent）收在 `unit60-project4/`。
 
 
 ## 🔗 GitHub
@@ -125,7 +126,7 @@
 
 ---
 
-## 🧩 Unit 2 · DeepSeek 流式问答 Demo（根目录 `main.py`）
+## 🧩 附 · 最早的流式问答 Demo（根目录 `main.py`，unit 体系之前的原型）
 
 > 单文件（约 80 行）：**FastAPI 接住参数 → 请求 DeepSeek → 流式吐回客户端**。没有多轮对话、没有数据库、没有前端。
 
@@ -150,9 +151,7 @@ curl -N "http://localhost:8000/ask?q=用一句话介绍 FastAPI"
 | `run.sh` | 等价于 `uv sync && uv run fastapi dev` |
 
 核心就三段：`@app.get("/ask")` 用 `Query` 接住问题 → `httpx.AsyncClient().stream()` 以 `stream=True` 请求 `/chat/completions` → 把每个 `data:` 分片里的 `delta.content` 立刻 `yield` 给 `StreamingResponse`。
-（Unit 6 会正式讲这套流式机制，届时把这里的实现对照一遍。）
-
----
+（Unit 6 已正式讲过这套流式机制，可以把这里的实现与之对照。）
 
 ---
 
@@ -209,7 +208,7 @@ bash 00-setup/healthcheck.sh -v       # 顺带打印失败项的完整输出
 | 阶段 | 天数 | 主题 | 状态 | 产出 |
 | --- | --- | --- | --- | --- |
 | 一 | Unit 3–14 | LLM API + Prompt + 全栈 Chat | ✅ 完成（2026-10-25 复核） | AI Chat 完整版 |
-| 二 | Unit 15–30 | Embedding / pgvector / RAG | 🟡 进行中（学到 Unit 18，材料已备到 30） | 企业知识库 AI |
+| 二 | Unit 15–30 | Embedding / pgvector / RAG | 🟡 进行中（学到 Unit 20，材料已备到 30） | 企业知识库 AI |
 | 三 | Unit 31–45 | Function Calling / LangGraph | 📦 材料就绪 | Research Agent |
 | 四 | Unit 46–60 | MCP | 📦 材料就绪（846 条自检全绿） | MCP 数据库 Agent |
 | 五 | Unit 61–75 | AI 工程化 + LLM 原理 | ⬜ | 容器化 + 评测 |

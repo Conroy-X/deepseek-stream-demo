@@ -32,6 +32,11 @@ WHITELIST_DOMAINS = ("example.com", "example.org", "example.net", "localhost")
 SSH_HOSTS = ("github.com", "gitlab.com", "bitbucket.org", "gitee.com", "ssh.github.com")
 # 明确虚构的人名/机构名，不应报错
 FICTIONAL_VALUES = ("张三", "李四", "王五", "赵六", "王小明", "某某", "示例", "某", "用户", "test", "demo")
+# 会被「姓名字段」误报的非人名：MCP resource 名 / 产品名 / 制度名 / 测试夹具
+BENIGN_NAME_VALUES = {
+    "使用说明", "机械键盘", "请假制度", "变更日志", "休假制度",
+    "知识库", "接口库", "评测", "自检", "重复", "退货", "退款",
+}
 
 PATTERNS: dict[str, re.Pattern[str]] = {
     "手机号": re.compile(r"(?<![\d*])1[3-9]\d{9}(?![\d*])"),
@@ -39,7 +44,7 @@ PATTERNS: dict[str, re.Pattern[str]] = {
     "身份证": re.compile(r"(?<!\d)\d{6}(19|20)\d{2}(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])\d{3}[\dXx](?!\d)"),
     "真实邮箱": re.compile(r"[A-Za-z0-9._%+-]+@(?!example\.|localhost)[A-Za-z0-9.-]+\.[A-Za-z]{2,}"),
     "硬编码密钥": re.compile(r"(sk-[A-Za-z0-9]{20,}|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})"),
-    "姓名字段": re.compile(r"[\"']?(name|姓名)[\"']?\s*[:=：]\s*[\"']([\u4e00-\u9fa5]{2,4})[\"']"),
+    "姓名字段": re.compile(r"(?:\bname\b|姓名)\s*[:=：]\s*[\"']([\u4e00-\u9fa5]{2,4})[\"']"),
     "学校": re.compile(r"[\u4e00-\u9fa5]{2,8}(大学|学院)"),
     "公司": re.compile(r"[\u4e00-\u9fa5]{2,10}(有限公司|股份有限公司)"),
     "详细地址": re.compile(r"[\u4e00-\u9fa5]{2,6}(省|市)[\u4e00-\u9fa5]{2,6}(区|县)[\u4e00-\u9fa5]{2,12}(路|街|号)"),
@@ -112,10 +117,12 @@ def main() -> int:
                     # 邮箱白名单
                     if label == "真实邮箱" and any(d in matched for d in WHITELIST_DOMAINS):
                         continue
-                    # 姓名字段：组 2 是等号/冒号后面的名字
+                    # 姓名字段：组 1 是等号/冒号后面的名字
                     if label == "姓名字段":
-                        value = m.group(2) if m.lastindex and m.lastindex >= 2 else ""
+                        value = m.group(1) if m.lastindex and m.lastindex >= 1 else ""
                         if any(f in value for f in FICTIONAL_VALUES):
+                            continue
+                        if value in BENIGN_NAME_VALUES:
                             continue
                     # 学校 / 公司：含虚构标记的跳过
                     if label in ("学校", "公司") and any(f in matched for f in FICTIONAL_VALUES):

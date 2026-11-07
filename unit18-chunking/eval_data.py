@@ -115,10 +115,10 @@ FACTS: list[dict] = [
     ),
     dict(
         doc="IT 与设备",
-        text="企业邮箱后缀统一为 @xingyao.tech，外部来信会经过网关安全过滤。",
+        text="企业邮箱后缀统一为 @example.com，外部来信会经过网关安全过滤。",
         q="公司邮箱后缀是什么",
         para="我们的工作邮件地址以什么结尾",
-        expected="邮箱后缀统一为 @xingyao.tech",
+        expected="邮箱后缀统一为 @example.com",
     ),
     # ---- 采购与合同 ----
     dict(
@@ -217,10 +217,10 @@ FACTS: list[dict] = [
     ),
     dict(
         doc="安全合规",
-        text="发现钓鱼邮件请立即转发至 security@xingyao.tech 并删除原邮件，不要点击其中链接。",
+        text="发现钓鱼邮件请立即转发至 security@example.com 并删除原邮件，不要点击其中链接。",
         q="钓鱼邮件报给谁",
         para="收到可疑邮件的上报邮箱是什么",
-        expected="security@xingyao.tech",
+        expected="security@example.com",
     ),
     dict(
         doc="安全合规",
