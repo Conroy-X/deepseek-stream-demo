@@ -1,0 +1,12 @@
+[project]
+name = "unit63-logging"
+version = "0.1.0"
+description = "Unit 63：结构化日志（JSON 行 + request_id 贯穿 LLM/Tool/Request）"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi[standard]>=0.115",
+    "uvicorn[standard]>=0.30",
+]
+
+[tool.uv]
+package = false
