@@ -3,7 +3,7 @@
 > 从传统 Web/前端 转向 **AI 应用开发工程师** 的完整学习工程。
 > 主路线：`LLM API → Prompt → RAG → Agent → LangGraph → MCP → AI 工程化 → 项目 → 面试`
 
-**当前进度**：Unit 1–17 已学完 ✅（16 实跑复核 15/15，17 补齐真实样本与冒烟实测）｜🟡 Unit 18 学习中｜📦 Unit 19–60 材料就绪（自检全绿，待逐个学）
+**当前进度**：Unit 1–19 已学完 ✅｜🟡 Unit 20 学习中（基础 RAG）｜📦 Unit 21–60 材料就绪（自检全绿，待逐个学）
 **状态图例**：✅ 已学完 ｜ 🟡 进行中 ｜ 📦 材料就绪（代码可跑、自检全绿，但还没学到——自检全绿 ≠ 学完）
 **每日投入**：1–2 小时（在职节奏）
 **主力模型**：DeepSeek `deepseek-flash`（OpenAI 兼容协议）
@@ -42,9 +42,9 @@
 ├── unit15-embedding/          # ✅ Unit 15  Embedding + 余弦相似度 + Top-K
 ├── unit16-pgvector/           # ✅ Unit 16  pgvector + HNSW / IVFFlat
 ├── unit17-doc-parsing/        # ✅ Unit 17  PDF / MD / TXT / DOCX 文档解析
-├── unit18-chunking/           # 🟡 Unit 18  固定 / 递归 / 语义切块
-├── unit19-vector-search/      # 📦 Unit 19  Top-K 向量检索与召回评测
-├── unit20-basic-rag/          # 📦 Unit 20  检索增强生成最小闭环
+├── unit18-chunking/           # ✅ Unit 18  固定 / 递归 / 语义切块
+├── unit19-vector-search/      # ✅ Unit 19  Top-K 向量检索与召回评测
+├── unit20-basic-rag/          # 🟡 Unit 20  检索增强生成最小闭环
 ├── unit21-citation/           # 📦 Unit 21  来源引用与页码定位
 ├── unit22-knowledge-base/     # 📦 Unit 22  知识库上传 / 列表 / 删除
 ├── unit23-doc-pipeline/       # 📦 Unit 23  文档解析切块后台流水线
