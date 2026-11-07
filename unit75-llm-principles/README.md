@@ -44,7 +44,7 @@ P(北京 | 我 爱) = ?
 
 这三项是「让大模型跑得动、跑得起」的推理侧工程重点。
 
-## 四、怎么跑
+## 五、怎么跑
 
 ```bash
 cd ~/ai-journey/unit75-llm-principles
@@ -57,7 +57,7 @@ curl "http://127.0.0.1:8075/sample?context=爱&temperature=2"
 curl "http://127.0.0.1:8075/loss?seq=我%20爱%20北京"
 ```
 
-## 五、完成标准
+## 六、完成标准
 
 - [ ] `uv run python main.py` 自检全过
 - [ ] 能说 LLM 的训练目标是什么
@@ -65,7 +65,7 @@ curl "http://127.0.0.1:8075/loss?seq=我%20爱%20北京"
 - [ ] 能解释 temperature 的作用
 - [ ] 能说交叉熵损失越低越好
 
-## 六、面试追问
+## 七、面试追问
 
 **Q: 为什么不用 greedy 生成？**
 → greedy 容易重复（一直选最高概率的常见 token）且没有创造性；
@@ -81,7 +81,7 @@ curl "http://127.0.0.1:8075/loss?seq=我%20爱%20北京"
 
 ---
 
-## 七、资料
+## 八、资料
 
 - [InstructGPT 论文（RLHF）](https://arxiv.org/abs/2203.02155)
 - [温度采样](https://en.wikipedia.org/wiki/Softmax_function)

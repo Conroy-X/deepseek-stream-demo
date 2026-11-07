@@ -56,7 +56,7 @@ KV Cache 就是把每层已算过的 K、V 存下来，下一个 token 只算新
 
 代价是显存，收益是**生成速度数量级提升**。KV Cache 是大模型推理的必选项。
 
-## 五、怎么跑
+## 六、怎么跑
 
 ```bash
 cd ~/ai-journey/unit74-attention
@@ -68,7 +68,7 @@ curl "http://127.0.0.1:8074/softmax?values=1,2,3"
 curl "http://127.0.0.1:8074/attention"
 ```
 
-## 六、完成标准
+## 七、完成标准
 
 - [ ] `uv run python main.py` 自检全过
 - [ ] 能复述注意力三步
@@ -76,7 +76,7 @@ curl "http://127.0.0.1:8074/attention"
 - [ ] 能解释「为什么除以 sqrt(d_k)」
 - [ ] 能解释因果 mask 的作用
 
-## 七、面试追问
+## 八、面试追问
 
 **Q: 多头注意力是什么？**
 → 把 Q/K/V 切成 h 份分别算注意力再拼起来。不同「头」关注不同的关系
@@ -91,7 +91,7 @@ FlashAttention、稀疏注意力、线性注意力等优化。
 
 ---
 
-## 八、资料
+## 九、资料
 
 - [Attention Is All You Need](https://arxiv.org/abs/1706.03762)
 - [The Illustrated Transformer](https://jalammar.github.io/illustrated-transformer/)
