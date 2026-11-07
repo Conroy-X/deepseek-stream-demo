@@ -1,0 +1,12 @@
+[project]
+name = "unit77-reranker"
+version = "0.1.0"
+description = "Unit 77：Reranker（初检 + 交叉编码重排 + Top-N 截断）"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi[standard]>=0.115",
+    "uvicorn[standard]>=0.30",
+]
+
+[tool.uv]
+package = false

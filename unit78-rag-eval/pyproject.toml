@@ -1,0 +1,12 @@
+[project]
+name = "unit78-rag-eval"
+version = "0.1.0"
+description = "Unit 78：RAG 评测收口（端到端 Recall@K + 答案准确率 + 误收/误拒）"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi[standard]>=0.115",
+    "uvicorn[standard]>=0.30",
+]
+
+[tool.uv]
+package = false

@@ -1,0 +1,12 @@
+[project]
+name = "unit76-rag-hybrid"
+version = "0.1.0"
+description = "Unit 76：RAG 优化 - 混合检索（BM25 + 向量 + RRF 融合）"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi[standard]>=0.115",
+    "uvicorn[standard]>=0.30",
+]
+
+[tool.uv]
+package = false
