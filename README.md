@@ -3,7 +3,7 @@
 > 从传统 Web/前端 转向 **AI 应用开发工程师** 的完整学习工程。
 > 主路线：`LLM API → Prompt → RAG → Agent → LangGraph → MCP → AI 工程化 → 项目 → 面试`
 
-**当前进度**：Unit 1–19 已学完 ✅｜🟡 Unit 20 学习中（基础 RAG）｜📦 Unit 21–60 材料就绪（自检全绿，待逐个学）
+**当前进度**：Unit 1–19 已学完 ✅｜🟡 Unit 20 学习中（基础 RAG）｜📦 Unit 21–90 材料就绪（自检全绿，待逐个学）
 **状态图例**：✅ 已学完 ｜ 🟡 进行中 ｜ 📦 材料就绪（代码可跑、自检全绿，但还没学到——自检全绿 ≠ 学完）
 **每日投入**：1–2 小时（在职节奏）
 **主力模型**：DeepSeek `deepseek-flash`（OpenAI 兼容协议）
@@ -85,6 +85,36 @@
 ├── unit58-error-recovery/     # 📦 Unit 58  Error Recovery（错误自愈）
 ├── unit59-mcp-ops/            # 📦 Unit 59  MCP 工程化（日志/超时/并发/错误码）
 ├── unit60-project4/           # 📦 Unit 60  项目 4 交付（ARCHITECTURE/SECURITY/DEMO）
+├── unit61-docker/            # 📦 Unit 61  Docker 容器化（真机构建 76 秒）
+├── unit62-redis/             # 📦 Unit 62  Redis 缓存与会话
+├── unit63-logging/           # 📦 Unit 63  结构化日志 + request_id
+├── unit64-retry/             # 📦 Unit 64  重试（退避+抖动+双上限）
+├── unit65-timeout/           # 📦 Unit 65  三层超时（LLM/工具/整体）
+├── unit66-rate-limit/        # 📦 Unit 66  限流（令牌桶/滑动窗口）
+├── unit67-auth/              # 📦 Unit 67  认证 vs 授权（401 vs 403）
+├── unit68-security-prompt-injection/ # 📦 Unit 68  提示词注入
+├── unit69-security-data-tool/ # 📦 Unit 69  数据泄露与工具权限
+├── unit70-evaluation/        # 📦 Unit 70  离线评测框架
+├── unit71-token/             # 📦 Unit 71  Token 原理（手写 BPE）
+├── unit72-embedding/         # 📦 Unit 72  Embedding 原理（语义空间）
+├── unit73-transformer/       # 📦 Unit 73  Transformer 架构
+├── unit74-attention/         # 📦 Unit 74  Attention（Q/K/V）
+├── unit75-llm-principles/    # 📦 Unit 75  LLM 原理（预测/损失/采样）
+├── unit76-rag-hybrid/        # 📦 Unit 76  混合检索（BM25+向量+RRF）
+├── unit77-reranker/          # 📦 Unit 77  检索后重排
+├── unit78-rag-eval/          # 📦 Unit 78  RAG 评测收口
+├── unit79-rag-engineering/   # 📦 Unit 79  RAG 工程化（配置化）
+├── unit80-project1-final/    # 📦 Unit 80  项目1最终版（横切接线）
+├── unit81-agent-optimize/    # 📦 Unit 81  Agent 优化
+├── unit82-langgraph/         # 📦 Unit 82  LangGraph 整合
+├── unit83-mcp/               # 📦 Unit 83  MCP 整合
+├── unit84-memory-hitl/       # 📦 Unit 84  Memory/HITL
+├── unit85-resume/            # 📦 Unit 85  简历（校验器）
+├── unit86-github/            # 📦 Unit 86  GitHub 整理
+├── unit87-interview-llm/     # 📦 Unit 87  面试 LLM+RAG
+├── unit88-interview-agent/   # 📦 Unit 88  面试 Agent+MCP
+├── unit89-interview-eng/     # 📦 Unit 89  面试 AI 工程化
+└── unit90-job-hunt/          # 📦 Unit 90  求职投递（跟踪器）
 ├── experiments/               # 🧪 课程外的试用（Search/Fetch API、零依赖）
 └── README.md
 ```
@@ -119,7 +149,7 @@
 
 | 仓库 | 内容 | 状态 |
 | --- | --- | --- |
-| [Conroy-X/ai-journey](https://github.com/Conroy-X/ai-journey) | 本工程全部代码：`unit01-fastapi/` ~ `unit60-project4/` 六十个学习单元 + 根目录流式 Demo（`main.py`）+ 学习文档（`docs/`） | ✅ 已同步 |
+| [Conroy-X/ai-journey](https://github.com/Conroy-X/ai-journey) | 本工程全部代码：`unit01-fastapi/` ~ `unit90-job-hunt/` 九十个学习单元 + 根目录流式 Demo（`main.py`）+ 学习文档（`docs/`） | ✅ 已同步 |
 
 > **`~/ai-journey` 就是本仓库的工作副本**（git 仓库根目录即此处），远端是 `git@github.com:Conroy-X/ai-journey.git`。
 > 推送走 **SSH**（`ssh -T git@github.com` 已验证为 `Conroy-X`）；`~/ai-journey` 是唯一工作副本。
